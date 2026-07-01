@@ -9,7 +9,7 @@ PIECE_VALUES = {
   King : 0
 }
 
-def evaluate(board):
+def evaluate_board(board):
   score = 0
   for row in board.grid:
     for piece in row:
