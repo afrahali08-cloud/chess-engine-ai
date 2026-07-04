@@ -3,8 +3,8 @@ import os
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-from chess.game import Game
-from chess.evaluation import evaluate
+from board.game import Game
+from board.evaluation import evaluate
 
 
 def main():
