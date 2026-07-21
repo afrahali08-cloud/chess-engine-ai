@@ -11,3 +11,14 @@ We're building a chess engine that:
   one learned from real game data
 - **Coaches** — analyzes a move you made and explains whether it was good or bad, 
   and why
+
+## Current architecture
+
+The playable engine path is based on `python-chess`:
+- `src/main.py` runs the command-line game.
+- `src/engine.py` searches legal moves with minimax and alpha-beta pruning.
+- `src/board/evaluation.py` evaluates `python-chess` board positions.
+
+The custom board implementation in `src/board/board.py`, `src/board/piece.py`,
+and `src/board/game.py` is kept as an experimental/manual rules module, but it is
+not used by the main engine loop.

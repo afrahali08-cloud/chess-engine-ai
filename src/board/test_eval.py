@@ -1,18 +1,25 @@
-import sys
-import os
+import chess
 
-sys.path.insert(0, os.path.dirname(__file__))
-
-from board.game import Game
-from board.evaluation import evaluate
+from board.evaluation import evaluate_board
 
 
-def main():
-    game = Game()
-    game.board.display()
-    score = evaluate(game.board)
-    print("Board Evaluation:", score)
+def test_starting_position_is_even():
+    board = chess.Board()
+
+    assert evaluate_board(board) == 0
 
 
-if __name__ == '__main__':
-    main()
+def test_missing_black_queen_favors_white():
+    board = chess.Board(
+        "rnb1kbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+    )
+
+    assert evaluate_board(board) > 800
+
+
+def test_missing_white_queen_favors_black():
+    board = chess.Board(
+        "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNB1KBNR w KQkq - 0 1"
+    )
+
+    assert evaluate_board(board) < -800
