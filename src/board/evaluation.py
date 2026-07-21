@@ -1,4 +1,4 @@
-
+"""Hand-crafted position evaluation for python-chess boards."""
 
 import chess
 

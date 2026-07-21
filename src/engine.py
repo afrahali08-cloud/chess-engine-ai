@@ -7,17 +7,9 @@ from typing import Any
 
 
 try:
-    from .evaluation import evaluate_board
+    from .board.evaluation import evaluate_board
 except ImportError:
-    try:
-        from evaluation import evaluate_board
-    except ImportError:
-
-        def evaluate_board(board: Any) -> float:
-            raise NotImplementedError(
-                "evaluate_board(board) is not available yet. "
-                "Add it to src/evaluation.py before running the engine."
-            )
+    from board.evaluation import evaluate_board
 
 
 def minimax(
