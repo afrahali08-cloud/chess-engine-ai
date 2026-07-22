@@ -1,1 +1,5 @@
+numpy
 python-chess
+scikit-learn
+scipy
+zstandard
