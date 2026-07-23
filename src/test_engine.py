@@ -1,7 +1,9 @@
 import chess
 import pytest
+from math import inf
 
-from engine import choose_best_move
+from board.evaluation import evaluate_board
+from engine import _quiescence, choose_best_move
 from main import main
 
 
@@ -41,6 +43,14 @@ def test_engine_recognizes_checkmate():
     assert score == 99999
 
 
+def test_quiescence_uses_white_relative_scores_for_both_sides():
+    white_to_move = chess.Board("7k/8/8/8/8/8/q7/R6K w - - 0 1")
+    black_to_move = chess.Board("r6k/Q7/8/8/8/8/8/7K b - - 0 1")
+
+    assert _quiescence(white_to_move, -inf, inf) > evaluate_board(white_to_move)
+    assert _quiescence(black_to_move, -inf, inf) < evaluate_board(black_to_move)
+
+
 def test_main_responds_after_human_move(monkeypatch, capsys):
     moves = iter(["e2e4", "quit"])
     monkeypatch.setattr("builtins.input", lambda _prompt: next(moves))
@@ -52,4 +62,3 @@ def test_main_responds_after_human_move(monkeypatch, capsys):
     assert "You played: e2e4" in output
     assert "Engine is thinking..." in output
     assert "Engine played:" in output
-

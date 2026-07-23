@@ -1,4 +1,5 @@
 numpy
+pytest
 python-chess
 scikit-learn
 scipy

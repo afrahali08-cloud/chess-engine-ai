@@ -30,7 +30,7 @@ except ImportError:
 _tt: dict = {}
 
 def _tt_key(board: Any) -> str:
-    return board.fen()
+    return " ".join(board.fen().split()[:4])
 
 def _tt_store(key: str, depth: int, score: float, flag: str):
     _tt[key] = (depth, score, flag)
@@ -95,29 +95,50 @@ def _order_moves(board: Any, moves: list) -> list:
 # eliminates the "sees capture but not recapture" class of blunders
 # ==============================================================================
 def _quiescence(board: Any, alpha: float, beta: float) -> float:
-    # stand-pat score — what we get if we do nothing
-    stand_pat = evaluate_board(board)
+    """Search tactical continuations using White-relative evaluation scores."""
+    if board.is_game_over():
+        return evaluate_board(board)
 
-    if stand_pat >= beta:
-        return beta
-    if stand_pat > alpha:
-        alpha = stand_pat
+    in_check = board.is_check()
+    moves = list(board.legal_moves) if in_check else [
+        move for move in board.legal_moves if board.is_capture(move)
+    ]
+    moves = _order_moves(board, moves)
 
-    # only search captures
-    captures = [m for m in board.legal_moves if board.is_capture(m)]
-    captures = _order_moves(board, captures)
+    if board.turn:
+        best_score = -inf if in_check else evaluate_board(board)
+        if best_score >= beta:
+            return best_score
+        alpha = max(alpha, best_score)
 
-    for move in captures:
+        for move in moves:
+            board.push(move)
+            score = _quiescence(board, alpha, beta)
+            board.pop()
+
+            best_score = max(best_score, score)
+            alpha = max(alpha, score)
+            if alpha >= beta:
+                break
+
+        return best_score
+
+    best_score = inf if in_check else evaluate_board(board)
+    if best_score <= alpha:
+        return best_score
+    beta = min(beta, best_score)
+
+    for move in moves:
         board.push(move)
-        score = -_quiescence(board, -beta, -alpha)
+        score = _quiescence(board, alpha, beta)
         board.pop()
 
-        if score >= beta:
-            return beta
-        if score > alpha:
-            alpha = score
+        best_score = min(best_score, score)
+        beta = min(beta, score)
+        if beta <= alpha:
+            break
 
-    return alpha
+    return best_score
 
 # ==============================================================================
 # MINIMAX WITH ALPHA-BETA PRUNING
@@ -136,13 +157,21 @@ def minimax(
     if cached is not None:
         return cached
 
+    original_alpha = alpha
+    original_beta = beta
+
     # base case — use quiescence search instead of raw eval
     if depth <= 0 or board.is_game_over():
         score = _quiescence(board, alpha, beta)
-        _tt_store(key, depth, score, 'exact')
+        if score <= original_alpha:
+            flag = 'upper'
+        elif score >= original_beta:
+            flag = 'lower'
+        else:
+            flag = 'exact'
+        _tt_store(key, depth, score, flag)
         return score
 
-    original_alpha = alpha
     moves = _order_moves(board, list(board.legal_moves))
 
     if maximizing_player:
@@ -157,11 +186,6 @@ def minimax(
             if beta <= alpha:
                 break  # beta cutoff
 
-        # store in transposition table
-        flag = 'exact' if best_score > original_alpha else 'upper'
-        _tt_store(key, depth, best_score, flag)
-        return best_score
-
     else:
         best_score = inf
         for move in moves:
@@ -174,9 +198,14 @@ def minimax(
             if beta <= alpha:
                 break  # alpha cutoff
 
-        flag = 'exact' if best_score < beta else 'lower'
-        _tt_store(key, depth, best_score, flag)
-        return best_score
+    if best_score <= original_alpha:
+        flag = 'upper'
+    elif best_score >= original_beta:
+        flag = 'lower'
+    else:
+        flag = 'exact'
+    _tt_store(key, depth, best_score, flag)
+    return best_score
 
 # ==============================================================================
 # ITERATIVE DEEPENING
