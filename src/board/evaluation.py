@@ -242,36 +242,74 @@ def calculate_pawn_structure_delta(board):
 
 
 def calculate_king_safety_delta(board):
-    """ΔK — pawn shield and open line penalties near king (middlegame only)."""
+    """ΔK — pawn shield and open line penalties near king (middlegame only).
+    Three cases:
+    - King castled (g1/c1 or g8/c8): full pawn shield check
+    - King uncastled but still on back rank: light penalty for not castling
+    - King has wandered: heavy penalty
+    """
     mg_delta = 0
 
-    # White king shield
+    # White king safety
     w_king_sq = board.king(chess.WHITE)
-    if w_king_sq is not None and chess.square_rank(w_king_sq) <= 1:
+    if w_king_sq is not None:
+        w_rank = chess.square_rank(w_king_sq)
         w_file = chess.square_file(w_king_sq)
-        shield = [w_king_sq + 8]
-        if w_file > 0: shield.append(w_king_sq + 7)
-        if w_file < 7: shield.append(w_king_sq + 9)
-        for sq in shield:
-            if 0 <= sq < 64 and board.piece_at(sq) == chess.Piece(chess.PAWN, chess.WHITE):
-                mg_delta += 10
-            else:
-                mg_delta -= 15
 
-    # Black king shield
+        if w_king_sq in (chess.G1, chess.C1):
+            # castled — check pawn shield properly
+            shield = [w_king_sq + 8]
+            if w_file > 0: shield.append(w_king_sq + 7)
+            if w_file < 7: shield.append(w_king_sq + 9)
+            for sq in shield:
+                if 0 <= sq < 64 and board.piece_at(sq) == chess.Piece(chess.PAWN, chess.WHITE):
+                    mg_delta += 10   # pawn shield intact
+                else:
+                    mg_delta -= 5    # open line near castled king
+
+        elif w_rank == 0:
+            # still on back rank but not castled — light penalty
+            # penalize more if it's late in the game (fewer pieces = should have castled by now)
+            phase = get_game_phase(board)
+            if phase < 20:  # pieces coming off the board, still no castle
+                mg_delta -= 20
+            else:
+                mg_delta -= 10  # early game, still ok
+
+        else:
+            # king has wandered into the middle of the board — dangerous
+            mg_delta -= 40
+
+    # Black king safety
     b_king_sq = board.king(chess.BLACK)
-    if b_king_sq is not None and chess.square_rank(b_king_sq) >= 6:
+    if b_king_sq is not None:
+        b_rank = chess.square_rank(b_king_sq)
         b_file = chess.square_file(b_king_sq)
-        shield = [b_king_sq - 8]
-        if b_file > 0: shield.append(b_king_sq - 9)
-        if b_file < 7: shield.append(b_king_sq - 7)
-        for sq in shield:
-            if 0 <= sq < 64 and board.piece_at(sq) == chess.Piece(chess.PAWN, chess.BLACK):
-                mg_delta -= 10
-            else:
-                mg_delta += 15
 
-    return mg_delta, 0  # king safety only middlegame 
+        if b_king_sq in (chess.G8, chess.C8):
+            # castled — check pawn shield properly
+            shield = [b_king_sq - 8]
+            if b_file > 0: shield.append(b_king_sq - 9)
+            if b_file < 7: shield.append(b_king_sq - 7)
+            for sq in shield:
+                if 0 <= sq < 64 and board.piece_at(sq) == chess.Piece(chess.PAWN, chess.BLACK):
+                    mg_delta -= 10   # pawn shield intact
+                else:
+                    mg_delta += 5    # open line near castled king
+
+        elif b_rank == 7:
+            # still on back rank but not castled — light penalty
+            phase = get_game_phase(board)
+            if phase < 20:
+                mg_delta += 20
+            else:
+                mg_delta += 10
+
+        else:
+            # king wandered
+            mg_delta += 40
+
+    return mg_delta, 0
 
 
 def evaluate_board(board):
