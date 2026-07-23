@@ -1,6 +1,11 @@
-"""Hand-crafted position evaluation for python-chess boards."""
+"""Learned chess evaluation with a hand-crafted fallback."""
 
 import chess
+
+try:
+    from .learned_evaluation import LearnedModelError, evaluate_learned_board
+except ImportError:
+    from learned_evaluation import LearnedModelError, evaluate_learned_board
 
 PIECE_VALUES_MG = {
     chess.PAWN:   100,
@@ -312,7 +317,7 @@ def calculate_king_safety_delta(board):
     return mg_delta, 0
 
 
-def evaluate_board(board):
+def evaluate_handcrafted_board(board):
     """
     Returns a centipawn score for the position.
     Positive = white is better, negative = black is better.
@@ -344,6 +349,17 @@ def evaluate_board(board):
 
     blended = (total_mg * mg_weight + total_eg * eg_weight) / 24.0
     return int(blended)
+
+
+def evaluate_board(board):
+    """Evaluate with the trained model, preserving exact terminal scores."""
+    if board.is_game_over():
+        return evaluate_handcrafted_board(board)
+
+    try:
+        return evaluate_learned_board(board)
+    except (FileNotFoundError, OSError, LearnedModelError):
+        return evaluate_handcrafted_board(board)
 
 
 
