@@ -13,13 +13,25 @@ from math import inf
 from time import time
 from typing import Any
 
-try:
-    from .evaluation import evaluate_board
-except ImportError:
+EVAL_MODE = "neural"  # options: "handcrafted", "ridge", "neural"
+
+if EVAL_MODE == "neural":
     try:
-        from board.evaluation import evaluate_board
+        from .board.neural_evaluation import evaluate_neural_board as evaluate_board
     except ImportError:
-        from src.board.evaluation import evaluate_board
+        from board.neural_evaluation import evaluate_neural_board as evaluate_board
+
+elif EVAL_MODE == "ridge":
+    try:
+        from .board.learned_evaluation import evaluate_learned_board as evaluate_board
+    except ImportError:
+        from board.learned_evaluation import evaluate_learned_board as evaluate_board
+
+else:  # handcrafted
+    try:
+        from .board.evaluation import evaluate_board
+    except ImportError:
+        from board.evaluation import evaluate_board
 
 
 # ==============================================================================
