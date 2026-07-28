@@ -19,7 +19,7 @@ from .learned_evaluation import (
 
 Evaluator = Callable[[chess.Board], int]
 EVALUATOR_CHOICES = ("handcrafted", "ridge", "neural")
-DEFAULT_EVALUATOR = "neural"
+DEFAULT_EVALUATOR = "ridge"
 
 
 @dataclass(frozen=True)

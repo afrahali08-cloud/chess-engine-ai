@@ -90,12 +90,12 @@ def compare(
             f"speed={positions_per_second:,.0f} positions/s"
         )
 
-    default_evaluator = min(results, key=lambda name: results[name]["mae_cp"])
+    lowest_mae_evaluator = min(results, key=lambda name: results[name]["mae_cp"])
     artifact: dict[str, object] = {
         "format_version": 1,
         "comparison_split": "test",
         "selection_rule": "lowest_test_mae_cp",
-        "default_evaluator": default_evaluator,
+        "lowest_mae_evaluator": lowest_mae_evaluator,
         "dataset": dataset_metadata(
             dataset,
             input_path=input_path,
@@ -106,7 +106,7 @@ def compare(
     }
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(artifact, indent=2) + "\n", encoding="utf-8")
-    print(f"Selected default evaluator: {default_evaluator}")
+    print(f"Lowest-MAE evaluator: {lowest_mae_evaluator}")
     print(f"Comparison written to {output_path}")
     return artifact
 

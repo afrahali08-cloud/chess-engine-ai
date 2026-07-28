@@ -26,6 +26,7 @@ try:
         EVALUATOR_CHOICES,
         resolve_evaluator,
     )
+    from .coach import analyze_move, format_move_analysis
     from .engine import choose_best_move
 except ImportError:
     from board.evaluators import (
@@ -33,6 +34,7 @@ except ImportError:
         EVALUATOR_CHOICES,
         resolve_evaluator,
     )
+    from coach import analyze_move, format_move_analysis
     from engine import choose_best_move
 
 
@@ -69,6 +71,23 @@ def build_parser() -> argparse.ArgumentParser:
         type=_positive_float,
         default=5.0,
         help="maximum search time per engine move in seconds (default: 5)",
+    )
+    parser.add_argument(
+        "--coach",
+        action="store_true",
+        help="analyze each human move",
+    )
+    parser.add_argument(
+        "--coach-depth",
+        type=_positive_int,
+        default=4,
+        help="maximum coach analysis depth (default: 4)",
+    )
+    parser.add_argument(
+        "--coach-time-limit",
+        type=_positive_float,
+        default=1.0,
+        help="coach analysis time per human move in seconds (default: 1)",
     )
     return parser
 
@@ -154,6 +173,8 @@ def main(argv: list[str] | None = None):
     print("Chess Engine AI — CMPT 310")
     print("You play White. Engine plays Black.")
     print(f"Evaluator: {evaluator_selection.selected}")
+    if args.coach:
+        print("Move coach: enabled")
     if evaluator_selection.selected != evaluator_selection.requested:
         print(
             f"Requested {evaluator_selection.requested}, "
@@ -171,8 +192,20 @@ def main(argv: list[str] | None = None):
                 print("Game ended.")
                 print_game_summary(board)
                 sys.exit(0)
+            analysis = None
+            if args.coach:
+                print("  Coach is analyzing...")
+                analysis = analyze_move(
+                    board,
+                    move,
+                    depth=args.coach_depth,
+                    time_limit=args.coach_time_limit,
+                    evaluator=evaluator_selection.evaluate,
+                )
             board.push(move)
             print(f"  You played: {move}")
+            if analysis is not None:
+                print(format_move_analysis(analysis))
 
         else:
             print("  Engine is thinking...")

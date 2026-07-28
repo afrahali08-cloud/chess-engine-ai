@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from math import inf
 from time import monotonic
-from typing import Any, Callable
+from typing import Any
 
 try:
     from .board.evaluators import DEFAULT_EVALUATOR, Evaluator, resolve_evaluator
@@ -18,6 +19,15 @@ _tt: dict[str, tuple[int, float, str]] = {}
 
 class SearchTimeout(RuntimeError):
     """Internal signal used to stop the current iterative-deepening pass."""
+
+
+@dataclass(frozen=True)
+class SearchResult:
+    best_move: Any
+    best_score: float
+    move_scores: dict[Any, float]
+    completed_depth: int
+    elapsed_seconds: float
 
 
 def _resolve_search_evaluator(
@@ -287,28 +297,37 @@ def minimax(
     return best_score
 
 
-def choose_best_move(
+def analyze_position(
     board: Any,
     depth: int = 5,
     time_limit: float = 5.0,
     *,
     evaluator: Evaluator | str | None = None,
-) -> tuple[Any, float]:
-    """Return the best move from the last fully completed search depth."""
+) -> SearchResult:
+    """Score every root move from the last fully completed search depth."""
     if depth <= 0:
         raise ValueError("depth must be greater than zero")
     if time_limit <= 0:
         raise ValueError("time_limit must be greater than zero")
 
     evaluate = _resolve_search_evaluator(evaluator)
+    start = monotonic()
     legal_moves = list(board.legal_moves)
     if not legal_moves or board.is_game_over():
-        return None, evaluate(board)
+        return SearchResult(
+            best_move=None,
+            best_score=float(evaluate(board)),
+            move_scores={},
+            completed_depth=0,
+            elapsed_seconds=monotonic() - start,
+        )
 
     _tt.clear()
-    deadline = monotonic() + time_limit
+    deadline = start + time_limit
     best_move = legal_moves[0]
     best_score = float(evaluate(board))
+    move_scores: dict[Any, float] = {}
+    completed_depth = 0
 
     try:
         root_moves = _order_moves(board, legal_moves, deadline=deadline)
@@ -318,6 +337,7 @@ def choose_best_move(
             _check_deadline(deadline)
             depth_best_move = None
             depth_best_score = -inf if board.turn else inf
+            depth_move_scores: dict[Any, float] = {}
 
             for move in root_moves:
                 _check_deadline(deadline)
@@ -335,6 +355,7 @@ def choose_best_move(
                 finally:
                     board.pop()
 
+                depth_move_scores[move] = score
                 if board.turn and score > depth_best_score:
                     depth_best_score = score
                     depth_best_move = move
@@ -345,7 +366,32 @@ def choose_best_move(
             if depth_best_move is not None:
                 best_move = depth_best_move
                 best_score = depth_best_score
+                move_scores = depth_move_scores
+                completed_depth = current_depth
     except SearchTimeout:
         pass
 
-    return best_move, best_score
+    return SearchResult(
+        best_move=best_move,
+        best_score=best_score,
+        move_scores=move_scores,
+        completed_depth=completed_depth,
+        elapsed_seconds=monotonic() - start,
+    )
+
+
+def choose_best_move(
+    board: Any,
+    depth: int = 5,
+    time_limit: float = 5.0,
+    *,
+    evaluator: Evaluator | str | None = None,
+) -> tuple[Any, float]:
+    """Return the best move from the last fully completed search depth."""
+    result = analyze_position(
+        board,
+        depth=depth,
+        time_limit=time_limit,
+        evaluator=evaluator,
+    )
+    return result.best_move, result.best_score

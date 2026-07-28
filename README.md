@@ -34,14 +34,26 @@ python -m pip install -r requirements.txt
 The engine supports hand-crafted, Ridge, and neural evaluation:
 
 ```bash
-python src/main.py --evaluator neural --time-limit 3 --depth 4
 python src/main.py --evaluator ridge --time-limit 3 --depth 4
+python src/main.py --evaluator neural --time-limit 3 --depth 4
 python src/main.py --evaluator handcrafted --time-limit 3 --depth 4
 ```
 
-Neural evaluation is the default because it has the lowest held-out test MAE.
-If PyTorch or the neural checkpoint is unavailable, the engine falls back to
-Ridge, then to the hand-crafted evaluator.
+Ridge evaluation is the default because it won the fixed-time playing-strength
+benchmark. Neural evaluation has the lowest held-out test MAE but is slower per
+position. If PyTorch or the neural checkpoint is unavailable, neural mode falls
+back to Ridge, then to the hand-crafted evaluator.
+
+Enable move coaching to classify each human move by centipawn loss and explain
+the engine's preferred alternative:
+
+```bash
+python src/main.py \
+  --evaluator ridge \
+  --coach \
+  --coach-time-limit 1 \
+  --time-limit 3
+```
 
 ## Preparing training data
 
@@ -98,6 +110,31 @@ Current results from 100,000 positions:
 | Hand-crafted | 202.4 cp | 288.1 cp | 0.443 |
 | Ridge | 170.5 cp | 239.8 cp | 0.614 |
 | Neural MLP | 156.2 cp | 226.9 cp | 0.654 |
+
+## Playing-strength benchmark
+
+Run color-swapped games from six fixed openings with equal search time:
+
+```bash
+python scripts/benchmark_evaluators.py \
+  --first ridge \
+  --second neural \
+  --time-limit 0.1 \
+  --depth 5 \
+  --openings 6 \
+  --overwrite
+```
+
+The current 12-game result is:
+
+| Evaluator | Wins | Draws | Losses | Points | Average depth |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Ridge | 5 | 5 | 2 | 7.5 | 1.52 |
+| Neural MLP | 2 | 5 | 5 | 4.5 | 1.28 |
+
+The benchmark uses both colors for every opening. All 12 games ended naturally
+by checkmate or threefold repetition. Results and per-game move data are stored
+in `models/strength_benchmark.json`.
 
 Run the complete test suite with:
 

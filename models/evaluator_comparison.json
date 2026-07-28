@@ -2,7 +2,7 @@
   "format_version": 1,
   "comparison_split": "test",
   "selection_rule": "lowest_test_mae_cp",
-  "default_evaluator": "neural",
+  "lowest_mae_evaluator": "neural",
   "dataset": {
     "source_file": "lichess_evaluations.csv",
     "source_sha256": "2447dfd7ef8c8a21322b1aa9da85e49562abd014c876ae41053274e13da96baf",
@@ -21,19 +21,19 @@
       "mae_cp": 202.38765775613635,
       "rmse_cp": 288.05139537903165,
       "r2": 0.44267067663631576,
-      "positions_per_second": 25478.650425263888
+      "positions_per_second": 25506.279758659115
     },
     "ridge": {
       "mae_cp": 170.54029613435358,
       "rmse_cp": 239.7925829920405,
       "r2": 0.6137722993786818,
-      "positions_per_second": 78014.78233131726
+      "positions_per_second": 78377.1318456889
     },
     "neural": {
       "mae_cp": 156.160985789526,
       "rmse_cp": 226.87725465834552,
       "r2": 0.6542566437242583,
-      "positions_per_second": 11751.420047627875
+      "positions_per_second": 11760.293023850523
     }
   }
 }
