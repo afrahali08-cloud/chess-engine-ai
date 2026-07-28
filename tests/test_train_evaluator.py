@@ -27,3 +27,11 @@ def test_game_split_is_deterministic_and_has_known_values():
 
     assert first_assignments == second_assignments
     assert set(first_assignments) == {"train", "validation", "test"}
+
+
+def test_every_position_from_a_game_uses_the_same_split():
+    game_id = "https://lichess.org/one-complete-game"
+
+    assignments = [split_for_game(game_id) for _ in range(20)]
+
+    assert len(set(assignments)) == 1

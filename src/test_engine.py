@@ -1,8 +1,9 @@
 import chess
 import pytest
 from math import inf
+from time import monotonic, sleep
 
-from board.evaluation import evaluate_board
+from board.evaluation import evaluate_handcrafted_board
 from engine import _quiescence, choose_best_move
 from main import main
 
@@ -17,7 +18,12 @@ from main import main
 def test_engine_returns_a_legal_move(board):
     legal_moves = set(board.legal_moves)
 
-    move, _ = choose_best_move(board, depth=2)
+    move, _ = choose_best_move(
+        board,
+        depth=2,
+        time_limit=1.0,
+        evaluator=evaluate_handcrafted_board,
+    )
 
     assert move in legal_moves
 
@@ -27,7 +33,12 @@ def test_search_does_not_change_the_board():
     fen_before_search = board.fen()
     move_stack_before_search = list(board.move_stack)
 
-    choose_best_move(board, depth=3)
+    choose_best_move(
+        board,
+        depth=3,
+        time_limit=1.0,
+        evaluator=evaluate_handcrafted_board,
+    )
 
     assert board.fen() == fen_before_search
     assert board.move_stack == move_stack_before_search
@@ -36,7 +47,11 @@ def test_search_does_not_change_the_board():
 def test_engine_recognizes_checkmate():
     board = chess.Board("7k/6Q1/6K1/8/8/8/8/8 b - - 0 1")
 
-    move, score = choose_best_move(board, depth=2)
+    move, score = choose_best_move(
+        board,
+        depth=2,
+        evaluator=evaluate_handcrafted_board,
+    )
 
     assert board.is_checkmate()
     assert move is None
@@ -47,8 +62,42 @@ def test_quiescence_uses_white_relative_scores_for_both_sides():
     white_to_move = chess.Board("7k/8/8/8/8/8/q7/R6K w - - 0 1")
     black_to_move = chess.Board("r6k/Q7/8/8/8/8/8/7K b - - 0 1")
 
-    assert _quiescence(white_to_move, -inf, inf) > evaluate_board(white_to_move)
-    assert _quiescence(black_to_move, -inf, inf) < evaluate_board(black_to_move)
+    assert _quiescence(
+        white_to_move,
+        -inf,
+        inf,
+        evaluator=evaluate_handcrafted_board,
+    ) > evaluate_handcrafted_board(white_to_move)
+    assert _quiescence(
+        black_to_move,
+        -inf,
+        inf,
+        evaluator=evaluate_handcrafted_board,
+    ) < evaluate_handcrafted_board(black_to_move)
+
+
+def test_search_deadline_is_bounded_and_preserves_board():
+    board = chess.Board()
+    fen_before_search = board.fen()
+    move_stack_before_search = list(board.move_stack)
+
+    def slow_evaluator(position):
+        sleep(0.005)
+        return evaluate_handcrafted_board(position)
+
+    start = monotonic()
+    move, _score = choose_best_move(
+        board,
+        depth=8,
+        time_limit=0.05,
+        evaluator=slow_evaluator,
+    )
+    elapsed = monotonic() - start
+
+    assert move in board.legal_moves
+    assert elapsed < 0.15
+    assert board.fen() == fen_before_search
+    assert board.move_stack == move_stack_before_search
 
 
 def test_main_responds_after_human_move(monkeypatch, capsys):
@@ -56,7 +105,16 @@ def test_main_responds_after_human_move(monkeypatch, capsys):
     monkeypatch.setattr("builtins.input", lambda _prompt: next(moves))
 
     with pytest.raises(SystemExit):
-        main()
+        main(
+            [
+                "--evaluator",
+                "handcrafted",
+                "--depth",
+                "1",
+                "--time-limit",
+                "0.1",
+            ]
+        )
 
     output = capsys.readouterr().out
     assert "You played: e2e4" in output

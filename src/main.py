@@ -6,6 +6,7 @@ Human plays white, engine plays black.
 """
 
 from __future__ import annotations
+import argparse
 import sys
 from pathlib import Path
 
@@ -20,9 +21,56 @@ if str(src_dir) not in sys.path:
 import chess
 
 try:
+    from .board.evaluators import (
+        DEFAULT_EVALUATOR,
+        EVALUATOR_CHOICES,
+        resolve_evaluator,
+    )
     from .engine import choose_best_move
 except ImportError:
+    from board.evaluators import (
+        DEFAULT_EVALUATOR,
+        EVALUATOR_CHOICES,
+        resolve_evaluator,
+    )
     from engine import choose_best_move
+
+
+def _positive_int(value: str) -> int:
+    parsed = int(value)
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("value must be greater than zero")
+    return parsed
+
+
+def _positive_float(value: str) -> float:
+    parsed = float(value)
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("value must be greater than zero")
+    return parsed
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Play chess against the engine.")
+    parser.add_argument(
+        "--evaluator",
+        choices=EVALUATOR_CHOICES,
+        default=DEFAULT_EVALUATOR,
+        help=f"position evaluator (default: {DEFAULT_EVALUATOR})",
+    )
+    parser.add_argument(
+        "--depth",
+        type=_positive_int,
+        default=4,
+        help="maximum iterative-deepening depth (default: 4)",
+    )
+    parser.add_argument(
+        "--time-limit",
+        type=_positive_float,
+        default=5.0,
+        help="maximum search time per engine move in seconds (default: 5)",
+    )
+    return parser
 
 
 def print_board(board: chess.Board):
@@ -97,13 +145,20 @@ def print_game_summary(board: chess.Board):
     print("=" * 40)
 
 
-def main():
+def main(argv: list[str] | None = None):
+    args = build_parser().parse_args(argv)
+    evaluator_selection = resolve_evaluator(args.evaluator)
     board = chess.Board()
-    depth = 4  # increase for stronger play, decrease if too slow
 
     print()
     print("Chess Engine AI — CMPT 310")
     print("You play White. Engine plays Black.")
+    print(f"Evaluator: {evaluator_selection.selected}")
+    if evaluator_selection.selected != evaluator_selection.requested:
+        print(
+            f"Requested {evaluator_selection.requested}, "
+            f"using {evaluator_selection.selected} fallback."
+        )
     print("Enter moves in UCI format: e2e4, g1f3, etc.")
     print("Type 'quit' to exit.")
 
@@ -121,7 +176,12 @@ def main():
 
         else:
             print("  Engine is thinking...")
-            best_move, score = choose_best_move(board, depth=depth, time_limit= 5.0)
+            best_move, score = choose_best_move(
+                board,
+                depth=args.depth,
+                time_limit=args.time_limit,
+                evaluator=evaluator_selection.evaluate,
+            )
 
             if best_move is None:
                 break

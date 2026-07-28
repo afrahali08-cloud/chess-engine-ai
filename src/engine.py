@@ -1,169 +1,208 @@
-"""
-Chess engine — minimax search with alpha-beta pruning.
-Optimizations included:
-  1. Move ordering (MVV-LVA captures first, then checks, then promotions)
-  2. Quiescence search (no more mid-capture-sequence blindness)
-  3. Transposition table (memoization — never re-evaluate same position)
-  4. Iterative deepening (time-based search instead of fixed depth)
-"""
+"""Minimax chess search with alpha-beta pruning and a hard deadline."""
 
 from __future__ import annotations
 
 from math import inf
-from time import time
-from typing import Any
+from time import monotonic
+from typing import Any, Callable
 
-EVAL_MODE = "neural"  # options: "handcrafted", "ridge", "neural"
-
-if EVAL_MODE == "neural":
-    try:
-        from .board.neural_evaluation import evaluate_neural_board as evaluate_board
-    except ImportError:
-        from board.neural_evaluation import evaluate_neural_board as evaluate_board
-
-elif EVAL_MODE == "ridge":
-    try:
-        from .board.learned_evaluation import evaluate_learned_board as evaluate_board
-    except ImportError:
-        from board.learned_evaluation import evaluate_learned_board as evaluate_board
-
-else:  # handcrafted
-    try:
-        from .board.evaluation import evaluate_board
-    except ImportError:
-        from board.evaluation import evaluate_board
+try:
+    from .board.evaluators import DEFAULT_EVALUATOR, Evaluator, resolve_evaluator
+except ImportError:
+    from board.evaluators import DEFAULT_EVALUATOR, Evaluator, resolve_evaluator
 
 
-# ==============================================================================
-# TRANSPOSITION TABLE
-# stores: position_key -> (depth, score, flag)
-# flag: 'exact' | 'lower' | 'upper' (for alpha-beta bounds)
-# ==============================================================================
-_tt: dict = {}
+PIECE_ORDER_VALUES = {1: 100, 2: 320, 3: 330, 4: 500, 5: 900, 6: 20000}
+_tt: dict[str, tuple[int, float, str]] = {}
+
+
+class SearchTimeout(RuntimeError):
+    """Internal signal used to stop the current iterative-deepening pass."""
+
+
+def _resolve_search_evaluator(
+    evaluator: Evaluator | str | None,
+) -> Evaluator:
+    if evaluator is None:
+        return resolve_evaluator(DEFAULT_EVALUATOR).evaluate
+    if isinstance(evaluator, str):
+        return resolve_evaluator(evaluator).evaluate
+    if callable(evaluator):
+        return evaluator
+    raise TypeError("evaluator must be a name or callable")
+
+
+def _check_deadline(deadline: float | None) -> None:
+    if deadline is not None and monotonic() >= deadline:
+        raise SearchTimeout
+
 
 def _tt_key(board: Any) -> str:
-    return " ".join(board.fen().split()[:4])
+    # The halfmove clock affects automatic draw detection and belongs in the key.
+    return " ".join(board.fen().split()[:5])
 
-def _tt_store(key: str, depth: int, score: float, flag: str):
+
+def _tt_store(key: str, depth: int, score: float, flag: str) -> None:
     _tt[key] = (depth, score, flag)
 
-def _tt_lookup(key: str, depth: int, alpha: float, beta: float):
-    if key not in _tt:
+
+def _tt_lookup(
+    key: str,
+    depth: int,
+    alpha: float,
+    beta: float,
+) -> float | None:
+    entry = _tt.get(key)
+    if entry is None:
         return None
-    stored_depth, score, flag = _tt[key]
+    stored_depth, score, flag = entry
     if stored_depth < depth:
-        return None  # stored at shallower depth, not reliable enough
-    if flag == 'exact':
+        return None
+    if flag == "exact":
         return score
-    if flag == 'lower' and score >= beta:
+    if flag == "lower" and score >= beta:
         return score
-    if flag == 'upper' and score <= alpha:
+    if flag == "upper" and score <= alpha:
         return score
     return None
 
-# ==============================================================================
-# MOVE ORDERING
-# search captures first (most valuable victim, least valuable attacker)
-# then checks, then quiet moves
-# better ordering = more alpha-beta cutoffs = faster search
-# ==============================================================================
-PIECE_ORDER_VALUES = {1: 100, 2: 320, 3: 330, 4: 500, 5: 900, 6: 20000}
 
-def _move_score(board: Any, move: Any) -> int:
+def _move_score(
+    board: Any,
+    move: Any,
+    *,
+    deadline: float | None = None,
+) -> int:
+    _check_deadline(deadline)
     score = 0
 
-    # captures — MVV-LVA
     if board.is_capture(move):
-        victim   = board.piece_at(move.to_square)
+        victim = board.piece_at(move.to_square)
         attacker = board.piece_at(move.from_square)
-        if victim and attacker:
-            score += 10 * PIECE_ORDER_VALUES.get(victim.piece_type, 0) \
-                       - PIECE_ORDER_VALUES.get(attacker.piece_type, 0)
+        if victim is not None and attacker is not None:
+            score += 10 * PIECE_ORDER_VALUES.get(
+                victim.piece_type, 0
+            ) - PIECE_ORDER_VALUES.get(attacker.piece_type, 0)
         else:
-            score += 500  # en passant
+            score += 500
 
-    # promotions
     if move.promotion:
         score += PIECE_ORDER_VALUES.get(move.promotion, 0)
 
-    # checks — push forward in ordering but don't pay the full cost of
-    # board.push/pop for every move; only do it if capture score is low
     if score < 100:
         board.push(move)
-        if board.is_check():
-            score += 50
-        board.pop()
+        try:
+            if board.is_check():
+                score += 50
+        finally:
+            board.pop()
 
+    _check_deadline(deadline)
     return score
 
 
-def _order_moves(board: Any, moves: list) -> list:
-    return sorted(moves, key=lambda m: _move_score(board, m), reverse=True)
+def _order_moves(
+    board: Any,
+    moves: list[Any],
+    *,
+    deadline: float | None = None,
+) -> list[Any]:
+    scored_moves = [
+        (_move_score(board, move, deadline=deadline), move) for move in moves
+    ]
+    scored_moves.sort(key=lambda item: item[0], reverse=True)
+    return [move for _score, move in scored_moves]
 
-# ==============================================================================
-# QUIESCENCE SEARCH
-# called at depth=0 instead of returning evaluate_board() directly
-# keeps searching captures until the position is "quiet" (no captures left)
-# eliminates the "sees capture but not recapture" class of blunders
-# ==============================================================================
-def _quiescence(board: Any, alpha: float, beta: float) -> float:
-    """Search tactical continuations using White-relative evaluation scores."""
+
+def _quiescence(
+    board: Any,
+    alpha: float,
+    beta: float,
+    *,
+    evaluator: Evaluator | str | None = None,
+    deadline: float | None = None,
+) -> float:
+    """Search captures and check evasions using White-relative scores."""
+    evaluate = _resolve_search_evaluator(evaluator)
+    _check_deadline(deadline)
+
     if board.is_game_over():
-        return evaluate_board(board)
+        return evaluate(board)
 
     in_check = board.is_check()
-    moves = list(board.legal_moves) if in_check else [
-        move for move in board.legal_moves if board.is_capture(move)
-    ]
-    moves = _order_moves(board, moves)
+    moves = (
+        list(board.legal_moves)
+        if in_check
+        else [move for move in board.legal_moves if board.is_capture(move)]
+    )
+    moves = _order_moves(board, moves, deadline=deadline)
 
     if board.turn:
-        best_score = -inf if in_check else evaluate_board(board)
+        best_score = -inf if in_check else evaluate(board)
+        _check_deadline(deadline)
         if best_score >= beta:
             return best_score
         alpha = max(alpha, best_score)
 
         for move in moves:
+            _check_deadline(deadline)
             board.push(move)
-            score = _quiescence(board, alpha, beta)
-            board.pop()
-
+            try:
+                score = _quiescence(
+                    board,
+                    alpha,
+                    beta,
+                    evaluator=evaluate,
+                    deadline=deadline,
+                )
+            finally:
+                board.pop()
             best_score = max(best_score, score)
             alpha = max(alpha, score)
             if alpha >= beta:
                 break
-
         return best_score
 
-    best_score = inf if in_check else evaluate_board(board)
+    best_score = inf if in_check else evaluate(board)
+    _check_deadline(deadline)
     if best_score <= alpha:
         return best_score
     beta = min(beta, best_score)
 
     for move in moves:
+        _check_deadline(deadline)
         board.push(move)
-        score = _quiescence(board, alpha, beta)
-        board.pop()
-
+        try:
+            score = _quiescence(
+                board,
+                alpha,
+                beta,
+                evaluator=evaluate,
+                deadline=deadline,
+            )
+        finally:
+            board.pop()
         best_score = min(best_score, score)
         beta = min(beta, score)
         if beta <= alpha:
             break
-
     return best_score
 
-# ==============================================================================
-# MINIMAX WITH ALPHA-BETA PRUNING
-# ==============================================================================
+
 def minimax(
     board: Any,
     depth: int,
     alpha: float,
     beta: float,
     maximizing_player: bool,
+    *,
+    evaluator: Evaluator | str | None = None,
+    deadline: float | None = None,
 ) -> float:
+    """Search a position while preserving the caller's board state."""
+    evaluate = _resolve_search_evaluator(evaluator)
+    _check_deadline(deadline)
 
-    # transposition table lookup
     key = _tt_key(board)
     cached = _tt_lookup(key, depth, alpha, beta)
     if cached is not None:
@@ -172,103 +211,141 @@ def minimax(
     original_alpha = alpha
     original_beta = beta
 
-    # base case — use quiescence search instead of raw eval
     if depth <= 0 or board.is_game_over():
-        score = _quiescence(board, alpha, beta)
+        score = _quiescence(
+            board,
+            alpha,
+            beta,
+            evaluator=evaluate,
+            deadline=deadline,
+        )
         if score <= original_alpha:
-            flag = 'upper'
+            flag = "upper"
         elif score >= original_beta:
-            flag = 'lower'
+            flag = "lower"
         else:
-            flag = 'exact'
+            flag = "exact"
         _tt_store(key, depth, score, flag)
         return score
 
-    moves = _order_moves(board, list(board.legal_moves))
+    moves = _order_moves(
+        board,
+        list(board.legal_moves),
+        deadline=deadline,
+    )
 
     if maximizing_player:
         best_score = -inf
         for move in moves:
+            _check_deadline(deadline)
             board.push(move)
-            score = minimax(board, depth - 1, alpha, beta, False)
-            board.pop()
-
+            try:
+                score = minimax(
+                    board,
+                    depth - 1,
+                    alpha,
+                    beta,
+                    False,
+                    evaluator=evaluate,
+                    deadline=deadline,
+                )
+            finally:
+                board.pop()
             best_score = max(best_score, score)
             alpha = max(alpha, score)
             if beta <= alpha:
-                break  # beta cutoff
-
+                break
     else:
         best_score = inf
         for move in moves:
+            _check_deadline(deadline)
             board.push(move)
-            score = minimax(board, depth - 1, alpha, beta, True)
-            board.pop()
-
+            try:
+                score = minimax(
+                    board,
+                    depth - 1,
+                    alpha,
+                    beta,
+                    True,
+                    evaluator=evaluate,
+                    deadline=deadline,
+                )
+            finally:
+                board.pop()
             best_score = min(best_score, score)
             beta = min(beta, score)
             if beta <= alpha:
-                break  # alpha cutoff
+                break
 
     if best_score <= original_alpha:
-        flag = 'upper'
+        flag = "upper"
     elif best_score >= original_beta:
-        flag = 'lower'
+        flag = "lower"
     else:
-        flag = 'exact'
+        flag = "exact"
     _tt_store(key, depth, best_score, flag)
     return best_score
 
-# ==============================================================================
-# ITERATIVE DEEPENING
-# searches depth 1, 2, 3... until time runs out
-# always returns best move found so far — never wastes thinking time
-# ==============================================================================
+
 def choose_best_move(
     board: Any,
     depth: int = 5,
-    time_limit: float = 5.0
+    time_limit: float = 5.0,
+    *,
+    evaluator: Evaluator | str | None = None,
 ) -> tuple[Any, float]:
+    """Return the best move from the last fully completed search depth."""
+    if depth <= 0:
+        raise ValueError("depth must be greater than zero")
+    if time_limit <= 0:
+        raise ValueError("time_limit must be greater than zero")
 
-    if not list(board.legal_moves) or board.is_game_over():
-        return None, evaluate_board(board)
+    evaluate = _resolve_search_evaluator(evaluator)
+    legal_moves = list(board.legal_moves)
+    if not legal_moves or board.is_game_over():
+        return None, evaluate(board)
 
-    # clear transposition table between moves
     _tt.clear()
+    deadline = monotonic() + time_limit
+    best_move = legal_moves[0]
+    best_score = float(evaluate(board))
 
-    best_move  = None
-    best_score = -inf if board.turn else inf
-    start      = time()
+    try:
+        root_moves = _order_moves(board, legal_moves, deadline=deadline)
+        best_move = root_moves[0]
 
-    for current_depth in range(1, depth + 1):
-        if time() - start > time_limit:
-            break  # out of time — return best found so far
+        for current_depth in range(1, depth + 1):
+            _check_deadline(deadline)
+            depth_best_move = None
+            depth_best_score = -inf if board.turn else inf
 
-        moves = _order_moves(board, list(board.legal_moves))
-        depth_best_move  = None
-        depth_best_score = -inf if board.turn else inf
-
-        if board.turn:  # white maximizes
-            for move in moves:
+            for move in root_moves:
+                _check_deadline(deadline)
                 board.push(move)
-                score = minimax(board, current_depth - 1, -inf, inf, False)
-                board.pop()
+                try:
+                    score = minimax(
+                        board,
+                        current_depth - 1,
+                        -inf,
+                        inf,
+                        bool(board.turn),
+                        evaluator=evaluate,
+                        deadline=deadline,
+                    )
+                finally:
+                    board.pop()
 
-                if score > depth_best_score:
+                if board.turn and score > depth_best_score:
                     depth_best_score = score
-                    depth_best_move  = move
-        else:  # black minimizes
-            for move in moves:
-                board.push(move)
-                score = minimax(board, current_depth - 1, -inf, inf, True)
-                board.pop()
-
-                if score < depth_best_score:
+                    depth_best_move = move
+                elif not board.turn and score < depth_best_score:
                     depth_best_score = score
-                    depth_best_move  = move
+                    depth_best_move = move
 
-        if depth_best_move is not None:
-            best_move  = depth_best_move
-            best_score = depth_best_score
+            if depth_best_move is not None:
+                best_move = depth_best_move
+                best_score = depth_best_score
+    except SearchTimeout:
+        pass
 
     return best_move, best_score

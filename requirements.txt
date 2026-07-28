@@ -3,4 +3,5 @@ pytest
 python-chess
 scikit-learn
 scipy
+torch
 zstandard
