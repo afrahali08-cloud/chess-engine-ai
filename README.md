@@ -34,22 +34,22 @@ python -m pip install -r requirements.txt
 The engine supports hand-crafted, Ridge, and neural evaluation:
 
 ```bash
-python src/main.py --evaluator ridge --time-limit 3 --depth 4
 python src/main.py --evaluator neural --time-limit 3 --depth 4
+python src/main.py --evaluator ridge --time-limit 3 --depth 4
 python src/main.py --evaluator handcrafted --time-limit 3 --depth 4
 ```
 
-Ridge evaluation is the default because it won the fixed-time playing-strength
-benchmark. Neural evaluation has the lowest held-out test MAE but is slower per
-position. If PyTorch or the neural checkpoint is unavailable, neural mode falls
-back to Ridge, then to the hand-crafted evaluator.
+Neural evaluation is the default because the 500,000-position model has both
+the lowest held-out test MAE and the best fixed-time playing-strength result.
+If PyTorch or the neural checkpoint is unavailable, neural mode falls back to
+Ridge, then to the hand-crafted evaluator.
 
 Enable move coaching to classify each human move by centipawn loss and explain
 the engine's preferred alternative:
 
 ```bash
 python src/main.py \
-  --evaluator ridge \
+  --evaluator neural \
   --coach \
   --coach-time-limit 1 \
   --time-limit 3
@@ -66,7 +66,7 @@ mate-only evaluations.
 python scripts/extract_lichess.py \
   --input ~/Downloads/lichess_db_standard_rated_2026-06.pgn.zst \
   --output data/lichess_evaluations.csv \
-  --limit 100000
+  --limit 500000
 ```
 
 The output columns are `game_id`, `fen`, `cp`, and `ply`. Local archives and the
@@ -103,13 +103,13 @@ python scripts/compare_evaluators.py \
   --overwrite
 ```
 
-Current results from 100,000 positions:
+Current results from 500,000 positions:
 
 | Evaluator | Test MAE | Test RMSE | R2 |
 | --- | ---: | ---: | ---: |
-| Hand-crafted | 202.4 cp | 288.1 cp | 0.443 |
-| Ridge | 170.5 cp | 239.8 cp | 0.614 |
-| Neural MLP | 156.2 cp | 226.9 cp | 0.654 |
+| Hand-crafted | 200.7 cp | 286.5 cp | 0.456 |
+| Ridge | 165.8 cp | 234.1 cp | 0.637 |
+| Neural MLP | 141.3 cp | 211.5 cp | 0.704 |
 
 ## Playing-strength benchmark
 
@@ -129,8 +129,8 @@ The current 12-game result is:
 
 | Evaluator | Wins | Draws | Losses | Points | Average depth |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Ridge | 5 | 5 | 2 | 7.5 | 1.52 |
-| Neural MLP | 2 | 5 | 5 | 4.5 | 1.28 |
+| Ridge | 1 | 6 | 5 | 4.0 | 1.37 |
+| Neural MLP | 5 | 6 | 1 | 8.0 | 1.11 |
 
 The benchmark uses both colors for every opening. All 12 games ended naturally
 by checkmate or threefold repetition. Results and per-game move data are stored
