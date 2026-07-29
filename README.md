@@ -23,6 +23,38 @@ The custom board implementation in `src/board/board.py`, `src/board/piece.py`,
 and `src/board/game.py` is kept as an experimental/manual rules module, but it is
 not used by the main engine loop.
 
+## Install and play
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+```
+
+The engine supports hand-crafted, Ridge, and neural evaluation:
+
+```bash
+python src/main.py --evaluator neural --time-limit 3 --depth 4
+python src/main.py --evaluator ridge --time-limit 3 --depth 4
+python src/main.py --evaluator handcrafted --time-limit 3 --depth 4
+```
+
+Neural evaluation is the default because the 500,000-position model has both
+the lowest held-out test MAE and the best fixed-time playing-strength result.
+If PyTorch or the neural checkpoint is unavailable, neural mode falls back to
+Ridge, then to the hand-crafted evaluator.
+
+Enable move coaching to classify each human move by centipawn loss and explain
+the engine's preferred alternative:
+
+```bash
+python src/main.py \
+  --evaluator neural \
+  --coach \
+  --coach-time-limit 1 \
+  --time-limit 3
+```
+
 ## Preparing training data
 
 Lichess standard-game archives can be read directly without writing the much
@@ -34,26 +66,78 @@ mate-only evaluations.
 python scripts/extract_lichess.py \
   --input ~/Downloads/lichess_db_standard_rated_2026-06.pgn.zst \
   --output data/lichess_evaluations.csv \
-  --limit 100000
+  --limit 500000
 ```
 
 The output columns are `game_id`, `fen`, `cp`, and `ply`. Local archives and the
 generated `data/` directory are ignored by Git.
 
-Train the first learned evaluation model from the extracted positions:
+Train both learned evaluators from the same extracted positions:
 
 ```bash
 python scripts/train_evaluator.py \
   --input data/lichess_evaluations.csv \
-  --output models/learned_evaluator.json
+  --output models/learned_evaluator.json \
+  --seed 42 \
+  --overwrite
+
+python scripts/train_neural_eval.py \
+  --input data/lichess_evaluations.csv \
+  --output models/neural_evaluator.pt \
+  --epochs 20 \
+  --seed 42 \
+  --overwrite
 ```
 
-Positions are split by game into training, validation, and test sets. The model
-learns symmetric piece-square weights plus side-to-move and castling features.
-Its JSON output contains the learned weights, data counts, and evaluation
-metrics, so training is reproducible and the result can be inspected in Git.
+Both trainers assign complete games to deterministic 80/10/10 training,
+validation, and test splits. This prevents neighboring positions from one game
+appearing in different splits. Model artifacts record the source-data hash,
+split counts, random seed, feature version, training parameters, and MAE/RMSE/R2
+metrics.
 
-At runtime, `evaluate_board()` loads `models/learned_evaluator.json` once and
-uses it for all non-terminal positions searched by minimax. Checkmate and draw
-scores remain rule-based. If the model is unavailable or invalid, evaluation
-falls back to the hand-crafted implementation.
+Compare all evaluators on the shared test split:
+
+```bash
+python scripts/compare_evaluators.py \
+  --input data/lichess_evaluations.csv \
+  --overwrite
+```
+
+Current results from 500,000 positions:
+
+| Evaluator | Test MAE | Test RMSE | R2 |
+| --- | ---: | ---: | ---: |
+| Hand-crafted | 200.7 cp | 286.5 cp | 0.456 |
+| Ridge | 165.8 cp | 234.1 cp | 0.637 |
+| Neural MLP | 141.3 cp | 211.5 cp | 0.704 |
+
+## Playing-strength benchmark
+
+Run color-swapped games from six fixed openings with equal search time:
+
+```bash
+python scripts/benchmark_evaluators.py \
+  --first ridge \
+  --second neural \
+  --time-limit 0.1 \
+  --depth 5 \
+  --openings 6 \
+  --overwrite
+```
+
+The current 12-game result is:
+
+| Evaluator | Wins | Draws | Losses | Points | Average depth |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Ridge | 1 | 6 | 5 | 4.0 | 1.37 |
+| Neural MLP | 5 | 6 | 1 | 8.0 | 1.11 |
+
+The benchmark uses both colors for every opening. All 12 games ended naturally
+by checkmate or threefold repetition. Results and per-game move data are stored
+in `models/strength_benchmark.json`.
+
+Run the complete test suite with:
+
+```bash
+python -m pytest -q
+```

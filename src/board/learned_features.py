@@ -5,6 +5,7 @@ from __future__ import annotations
 import chess
 
 
+FEATURE_ENCODING = "symmetric_piece_square_v1"
 PIECE_SQUARE_FEATURES = 6 * 64
 TURN_FEATURE = PIECE_SQUARE_FEATURES
 KINGSIDE_CASTLING_FEATURE = TURN_FEATURE + 1

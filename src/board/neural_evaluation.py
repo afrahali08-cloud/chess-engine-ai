@@ -1,3 +1,5 @@
+"""Runtime inference for the neural chess evaluator."""
+
 from __future__ import annotations
 
 from functools import lru_cache
@@ -5,12 +7,9 @@ from pathlib import Path
 
 import chess
 import torch
-import torch.nn as nn
 
-try:
-    from .neural_features import TOTAL_FEATURES, board_to_features
-except ImportError:
-    from neural_features import TOTAL_FEATURES, board_to_features
+from .neural_features import FEATURE_ENCODING, TOTAL_FEATURES, board_to_features
+from .neural_model import EvalNet
 
 
 DEFAULT_MODEL_PATH = (
@@ -18,58 +17,75 @@ DEFAULT_MODEL_PATH = (
 )
 
 
-class EvalNet(nn.Module):
-    def __init__(self, input_size: int = TOTAL_FEATURES):
-        super().__init__()
-        self.network = nn.Sequential(
-            nn.Linear(input_size, 256),
-            nn.ReLU(),
-            nn.Dropout(0.1),
-            nn.Linear(256, 128),
-            nn.ReLU(),
-            nn.Dropout(0.1),
-            nn.Linear(128, 1)
+class NeuralModelError(ValueError):
+    """Raised when a neural model checkpoint is incompatible or malformed."""
+
+
+@lru_cache(maxsize=None)
+def _load_model_cached(model_path: Path) -> tuple[EvalNet, int]:
+    try:
+        checkpoint = torch.load(
+            model_path,
+            map_location="cpu",
+            weights_only=True,
         )
+        input_size = int(checkpoint["input_size"])
+        clip_cp = int(checkpoint["clip_cp"])
+        feature_encoding = checkpoint["feature_encoding"]
+        model_state = checkpoint["model_state"]
+    except FileNotFoundError:
+        raise
+    except (KeyError, OSError, RuntimeError, TypeError, ValueError) as error:
+        raise NeuralModelError(f"invalid neural model: {model_path}") from error
 
-    def forward(self, x):
-        return self.network(x).squeeze(-1)
+    if input_size != TOTAL_FEATURES:
+        raise NeuralModelError(
+            f"expected {TOTAL_FEATURES} features, model contains {input_size}"
+        )
+    if feature_encoding != FEATURE_ENCODING:
+        raise NeuralModelError(
+            f"expected feature encoding {FEATURE_ENCODING}, "
+            f"found {feature_encoding}"
+        )
+    if clip_cp <= 0:
+        raise NeuralModelError("model clip_cp must be greater than zero")
 
-
-@lru_cache(maxsize=1)
-def _load_model(model_path: Path):
-    """Load model once and cache it — called millions of times per game."""
-    checkpoint = torch.load(model_path, map_location="cpu")
-    model = EvalNet(input_size=checkpoint["input_size"])
-    model.load_state_dict(checkpoint["model_state"])
+    model = EvalNet(input_size=input_size)
+    try:
+        model.load_state_dict(model_state)
+    except RuntimeError as error:
+        raise NeuralModelError(f"incompatible neural weights: {model_path}") from error
     model.eval()
-    return model, checkpoint["clip_cp"]
+    return model, clip_cp
+
+
+def load_neural_model(
+    model_path: Path = DEFAULT_MODEL_PATH,
+) -> tuple[EvalNet, int]:
+    """Load and cache a validated neural evaluator."""
+    return _load_model_cached(Path(model_path))
 
 
 def evaluate_neural_board(
     board: chess.Board,
-    model_path: Path = DEFAULT_MODEL_PATH
+    model_path: Path = DEFAULT_MODEL_PATH,
 ) -> int:
-    """
-    Predict centipawn eval for a position using the neural network.
-    
-    Positive = white winning, negative = black winning.
-    Returns integer centipawns, same interface as evaluate_board().
-    """
-    # handle terminal states before calling model
+    """Predict a white-relative centipawn score for a board."""
     if board.is_checkmate():
         return -99999 if board.turn == chess.WHITE else 99999
-    if board.is_stalemate() or board.is_insufficient_material():
+    if (
+        board.is_stalemate()
+        or board.is_insufficient_material()
+        or board.is_seventyfive_moves()
+        or board.is_fivefold_repetition()
+    ):
         return 0
 
-    model, clip_cp = _load_model(model_path)
+    model, clip_cp = load_neural_model(model_path)
+    features = torch.from_numpy(board_to_features(board)).unsqueeze(0)
 
-    features = board_to_features(board)
-    x = torch.tensor(features, dtype=torch.float32).unsqueeze(0)
+    with torch.inference_mode():
+        score = float(model(features).item())
 
-    with torch.no_grad():
-        score = model(x).item()
-
-    score = max(-clip_cp, min(clip_cp, score))
-    score = score*2.5
     score = max(-clip_cp, min(clip_cp, score))
     return int(round(score))
