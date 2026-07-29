@@ -18,7 +18,7 @@ import numpy as np
 from pathlib import Path
 
 OUTPUT_PATH = Path("data/eval_positions.csv")
-LIMIT       = 500_000   # how many positions to collect
+LIMIT       = 4_000_000   # how many positions to collect
 EVAL_CAP    = 1500      # clip evals beyond ±1500cp
 
 def main():
