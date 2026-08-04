@@ -8,16 +8,62 @@ from dataclasses import dataclass, field
 RGB = tuple[int, int, int]
 RGBA = tuple[int, int, int, int]
 
+# Explicit paths first, because font-name matching is unreliable across
+# platforms. These cover Debian/Ubuntu, Arch, Fedora, macOS, and Windows.
 PIECE_FONT_CANDIDATES = (
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    "/usr/share/fonts/TTF/DejaVuSans.ttf",
+    "/usr/share/fonts/dejavu/DejaVuSans.ttf",
+    "/usr/share/fonts/dejavu-sans-fonts/DejaVuSans.ttf",
     "/usr/share/fonts/truetype/freefont/FreeSerif.ttf",
+    "/usr/share/fonts/gnu-free/FreeSerif.ttf",
+    "/usr/local/share/fonts/DejaVuSans.ttf",
+    "/Library/Fonts/Arial Unicode.ttf",
+    "/System/Library/Fonts/Apple Symbols.ttf",
+    "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+    "C:/Windows/Fonts/seguisym.ttf",
+    "C:/Windows/Fonts/DejaVuSans.ttf",
+    "C:/Windows/Fonts/ARIALUNI.TTF",
 )
+# Family names to try via pygame.font.match_font when no explicit path exists.
+# Only fonts that actually carry U+265A-U+265F are worth listing.
+PIECE_FONT_FAMILIES = (
+    "dejavusans",
+    "freeserif",
+    "segoeuisymbol",
+    "applesymbols",
+    "arialunicodems",
+    "notosanssymbols2",
+    "symbola",
+    "quivira",
+)
+
 UI_FONT_CANDIDATES = (
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    "/usr/share/fonts/TTF/DejaVuSans.ttf",
+    "/usr/share/fonts/dejavu/DejaVuSans.ttf",
+    "/Library/Fonts/Arial.ttf",
+    "/System/Library/Fonts/Supplemental/Arial.ttf",
+    "C:/Windows/Fonts/segoeui.ttf",
+    "C:/Windows/Fonts/arial.ttf",
 )
+UI_FONT_FAMILIES = ("dejavusans", "arial", "segoeui", "helvetica", "liberationsans")
+
 MONO_FONT_CANDIDATES = (
     "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
+    "/usr/share/fonts/TTF/DejaVuSansMono.ttf",
+    "/usr/share/fonts/dejavu/DejaVuSansMono.ttf",
+    "/System/Library/Fonts/Menlo.ttc",
+    "/Library/Fonts/Courier New.ttf",
+    "C:/Windows/Fonts/consola.ttf",
+    "C:/Windows/Fonts/cour.ttf",
 )
+MONO_FONT_FAMILIES = ("dejavusansmono", "consolas", "menlo", "couriernew", "monospace")
+
+# A noncharacter: no font may define a glyph for it, so whatever it renders is
+# that font's "missing glyph" box. Comparing against it is the only reliable way
+# to detect tofu -- Font.metrics() reports real values for absent glyphs.
+NOTDEF_PROBE = "\ufffe"
 
 # Filled glyphs are used for BOTH colors and tinted, so the two sides share a
 # silhouette the way a real set does. The hollow U+2654 range is thin-stroke and

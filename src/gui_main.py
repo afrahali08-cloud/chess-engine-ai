@@ -45,6 +45,11 @@ def build_gui_parser() -> argparse.ArgumentParser:
         default="1280x800",
         help="window size as WIDTHxHEIGHT (default: 1280x800)",
     )
+    parser.add_argument(
+        "--check-fonts",
+        action="store_true",
+        help="report which fonts were found for the pieces, then exit",
+    )
     return parser
 
 
@@ -60,6 +65,13 @@ def parse_window(value: str) -> tuple[int, int]:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_gui_parser().parse_args(argv)
+
+    if args.check_fonts:
+        from gui.pieces import describe_fonts
+
+        print(describe_fonts())
+        return 0
+
     width, height = parse_window(args.window)
     config = SessionConfig(
         evaluator=args.evaluator,

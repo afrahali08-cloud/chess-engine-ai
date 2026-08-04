@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import math
 import os
+import sys
 from dataclasses import dataclass
 
 import chess
@@ -20,34 +21,124 @@ import pygame
 
 from .theme import (
     MONO_FONT_CANDIDATES,
+    MONO_FONT_FAMILIES,
+    NOTDEF_PROBE,
     PIECE_FONT_CANDIDATES,
+    PIECE_FONT_FAMILIES,
     PIECE_GLYPHS,
     UI_FONT_CANDIDATES,
+    UI_FONT_FAMILIES,
     DEFAULT_THEME,
     Theme,
 )
 
 
 OUTLINE_SAMPLES = 16  # 8 compass offsets leave visible corners at 3px
+GLYPH_PROBE_SIZE = 48
+BUNDLED_FONT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
 
 
 class FontUnavailableError(RuntimeError):
-    """Raised when no candidate font could be loaded."""
+    """Raised when no font with the required glyphs could be found."""
 
 
-def resolve_font_path(candidates: tuple[str, ...], *, match: str | None = None) -> str:
-    for path in candidates:
-        if path and os.path.exists(path):
+def _raster(font, text: str) -> bytes:
+    return pygame.image.tostring(font.render(text, True, (255, 255, 255)), "RGBA")
+
+
+def font_supports(font, glyphs) -> bool:
+    """True if ``font`` draws real glyphs rather than missing-glyph boxes.
+
+    Font.metrics() returns plausible values for absent characters and a tofu box
+    has plenty of ink, so neither is a usable test. Rendering a noncharacter
+    gives this font's tofu; any glyph matching it byte-for-byte is missing.
+    """
+    tofu = _raster(font, NOTDEF_PROBE)
+    for glyph in glyphs:
+        surface = font.render(glyph, True, (255, 255, 255))
+        if surface.get_bounding_rect().height == 0:
+            return False
+        if _raster(font, glyph) == tofu:
+            return False
+    return True
+
+
+def candidate_font_paths(
+    explicit: tuple[str, ...],
+    families: tuple[str, ...],
+    *,
+    bundled_names: tuple[str, ...] = (),
+) -> list[str]:
+    """Ordered, de-duplicated font paths to try."""
+    found: list[str] = []
+
+    def add(path: str | None) -> None:
+        if path and path not in found and os.path.exists(path):
+            found.append(path)
+
+    for name in bundled_names:
+        add(os.path.join(BUNDLED_FONT_DIR, name))
+    for path in explicit:
+        add(path)
+    # matplotlib always ships DejaVuSans and is common in course environments.
+    try:
+        import matplotlib
+
+        add(os.path.join(matplotlib.get_data_path(), "fonts", "ttf", "DejaVuSans.ttf"))
+        add(
+            os.path.join(
+                matplotlib.get_data_path(), "fonts", "ttf", "DejaVuSansMono.ttf"
+            )
+        )
+    except Exception:  # noqa: BLE001 - matplotlib is optional
+        pass
+    for family in families:
+        add(pygame.font.match_font(family))
+    return found
+
+
+def resolve_piece_font() -> str:
+    """First font that can actually draw the chess pieces."""
+    tried = candidate_font_paths(
+        PIECE_FONT_CANDIDATES,
+        PIECE_FONT_FAMILIES,
+        bundled_names=("DejaVuSans.ttf", "FreeSerif.ttf"),
+    )
+    for path in tried:
+        try:
+            font = pygame.font.Font(path, GLYPH_PROBE_SIZE)
+        except Exception:  # noqa: BLE001 - unreadable font file, try the next
+            continue
+        if font_supports(font, PIECE_GLYPHS.values()):
             return path
-    if match:
-        found = pygame.font.match_font(match)
-        if found:
-            return found
-    raise FontUnavailableError(f"none of these fonts exist: {candidates}")
+    raise FontUnavailableError(
+        "no installed font contains the chess piece glyphs "
+        "(U+265A-U+265F).\n"
+        f"Checked {len(tried)} font(s): "
+        + (", ".join(tried) if tried else "none found")
+        + "\nInstall one of: DejaVu Sans (Linux: `sudo apt install fonts-dejavu-core`, "
+        "or `pip install matplotlib`), GNU FreeFont, or Noto Sans Symbols 2. "
+        "Run `python src/gui_main.py --check-fonts` for details."
+    )
 
 
-def load_font(candidates: tuple[str, ...], size: int, *, match: str | None = None):
-    return pygame.font.Font(resolve_font_path(candidates, match=match), size)
+def resolve_ui_font(
+    explicit: tuple[str, ...],
+    families: tuple[str, ...],
+) -> str | None:
+    """Any readable font will do for UI text; ``None`` means pygame's default."""
+    for path in candidate_font_paths(explicit, families):
+        try:
+            pygame.font.Font(path, GLYPH_PROBE_SIZE)
+        except Exception:  # noqa: BLE001
+            continue
+        return path
+    return None
+
+
+def load_font(candidates: tuple[str, ...], size: int, *, families: tuple[str, ...] = ()):
+    """Load a UI font, falling back to pygame's built-in rather than failing."""
+    return pygame.font.Font(resolve_ui_font(candidates, families), size)
 
 
 @dataclass(frozen=True)
@@ -82,9 +173,7 @@ class PieceRenderer:
     ) -> None:
         self.square_px = square_px
         self.theme = theme
-        self.font_path = font_path or resolve_font_path(
-            PIECE_FONT_CANDIDATES, match="dejavusans"
-        )
+        self.font_path = font_path or resolve_piece_font()
         self.font_size = self._fit_font_size()
         self._font = pygame.font.Font(self.font_path, self.font_size)
         self._cache: dict[tuple[int, bool], Glyph] = {}
@@ -161,15 +250,57 @@ class Fonts:
 
     @classmethod
     def load(cls, theme: Theme = DEFAULT_THEME) -> "Fonts":
+        ui = UI_FONT_CANDIDATES
+        fam = UI_FONT_FAMILIES
         return cls(
-            small=load_font(UI_FONT_CANDIDATES, theme.font_small, match="dejavusans"),
-            body=load_font(UI_FONT_CANDIDATES, theme.font_body, match="dejavusans"),
-            label=load_font(UI_FONT_CANDIDATES, theme.font_label, match="dejavusans"),
-            title=load_font(UI_FONT_CANDIDATES, theme.font_title, match="dejavusans"),
+            small=load_font(ui, theme.font_small, families=fam),
+            body=load_font(ui, theme.font_body, families=fam),
+            label=load_font(ui, theme.font_label, families=fam),
+            title=load_font(ui, theme.font_title, families=fam),
             mono=load_font(
-                MONO_FONT_CANDIDATES, theme.font_mono, match="dejavusansmono"
+                MONO_FONT_CANDIDATES, theme.font_mono, families=MONO_FONT_FAMILIES
             ),
         )
+
+
+def describe_fonts() -> str:
+    """Human-readable report of which fonts were found and whether they work."""
+    pygame.font.init()
+    lines = [
+        f"platform: {sys.platform}",
+        f"pygame:   {pygame.version.ver}",
+        f"bundled font dir: {BUNDLED_FONT_DIR}"
+        + ("" if os.path.isdir(BUNDLED_FONT_DIR) else " (absent)"),
+        "",
+        "piece font candidates (need U+265A-U+265F):",
+    ]
+    candidates = candidate_font_paths(
+        PIECE_FONT_CANDIDATES,
+        PIECE_FONT_FAMILIES,
+        bundled_names=("DejaVuSans.ttf", "FreeSerif.ttf"),
+    )
+    if not candidates:
+        lines.append("  (none of the candidate paths or families exist)")
+    for path in candidates:
+        try:
+            font = pygame.font.Font(path, GLYPH_PROBE_SIZE)
+        except Exception as error:  # noqa: BLE001
+            lines.append(f"  [unreadable] {path}  ({error})")
+            continue
+        ok = font_supports(font, PIECE_GLYPHS.values())
+        lines.append(f"  [{'OK      ' if ok else 'NO GLYPH'}] {path}")
+
+    try:
+        chosen = resolve_piece_font()
+        lines += ["", f"selected piece font: {chosen}"]
+    except FontUnavailableError as error:
+        lines += ["", f"NO USABLE PIECE FONT: {error}"]
+
+    ui = resolve_ui_font(UI_FONT_CANDIDATES, UI_FONT_FAMILIES)
+    mono = resolve_ui_font(MONO_FONT_CANDIDATES, MONO_FONT_FAMILIES)
+    lines.append(f"ui font:             {ui or 'pygame built-in default'}")
+    lines.append(f"mono font:           {mono or 'pygame built-in default'}")
+    return "\n".join(lines)
 
 
 @dataclass

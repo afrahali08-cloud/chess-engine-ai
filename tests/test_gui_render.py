@@ -16,9 +16,18 @@ pygame = pytest.importorskip("pygame")
 
 from gui import interaction
 from gui.layout import build_layout, square_rect
-from gui.pieces import Assets, PieceRenderer
+from gui.pieces import (
+    Assets,
+    FontUnavailableError,
+    PieceRenderer,
+    candidate_font_paths,
+    describe_fonts,
+    font_supports,
+    resolve_piece_font,
+    resolve_ui_font,
+)
 from gui.render import draw_frame, wrap_text
-from gui.theme import DEFAULT_THEME, PIECE_GLYPHS
+from gui.theme import DEFAULT_THEME, NOTDEF_PROBE, PIECE_GLYPHS
 from gui.viewmodel import CoachView, MoveRow, ViewModel
 
 
@@ -37,6 +46,98 @@ def assets():
 
 def surface(size=(1280, 800)):
     return pygame.Surface(size)
+
+
+# --------------------------------------------------------- font choice
+
+
+def glyphless_font_path():
+    """A font on this machine that lacks the chess glyphs, if there is one."""
+    for family in ("ubuntu", "liberationsans", "notosansmono", "freesans"):
+        path = pygame.font.match_font(family)
+        if not path:
+            continue
+        try:
+            font = pygame.font.Font(path, 48)
+        except Exception:  # noqa: BLE001
+            continue
+        if not font_supports(font, PIECE_GLYPHS.values()):
+            return path
+    return None
+
+
+def test_pieces_do_not_render_as_missing_glyph_boxes(assets):
+    """Regression: a font without chess glyphs used to draw plain rectangles.
+
+    Font.metrics() reports real values for absent characters and a tofu box has
+    plenty of ink, so the only reliable check is against the font's own
+    missing-glyph render.
+    """
+    font = pygame.font.Font(assets.pieces.font_path, 48)
+    tofu = pygame.image.tostring(
+        font.render(NOTDEF_PROBE, True, (255, 255, 255)), "RGBA"
+    )
+    for glyph in PIECE_GLYPHS.values():
+        rendered = pygame.image.tostring(
+            font.render(glyph, True, (255, 255, 255)), "RGBA"
+        )
+        assert rendered != tofu, f"{glyph!r} renders as a missing-glyph box"
+
+
+def test_font_supports_accepts_the_resolved_piece_font():
+    font = pygame.font.Font(resolve_piece_font(), 48)
+    assert font_supports(font, PIECE_GLYPHS.values()) is True
+
+
+def test_font_supports_rejects_a_font_without_chess_glyphs():
+    path = glyphless_font_path()
+    if path is None:
+        pytest.skip("every font on this machine has the chess glyphs")
+    assert font_supports(pygame.font.Font(path, 48), PIECE_GLYPHS.values()) is False
+
+
+def test_resolve_piece_font_picks_something_that_works():
+    path = resolve_piece_font()
+    assert os.path.exists(path)
+
+
+def test_resolve_piece_font_reports_clearly_when_nothing_works(monkeypatch):
+    """The teammate-facing failure: say what is wrong, do not draw boxes."""
+    from gui import pieces
+
+    glyphless = glyphless_font_path()
+    monkeypatch.setattr(
+        pieces, "PIECE_FONT_CANDIDATES", (glyphless,) if glyphless else ()
+    )
+    monkeypatch.setattr(pieces, "PIECE_FONT_FAMILIES", ())
+    monkeypatch.setattr(pieces, "BUNDLED_FONT_DIR", "/nonexistent")
+    monkeypatch.setitem(__import__("sys").modules, "matplotlib", None)
+
+    with pytest.raises(FontUnavailableError) as caught:
+        pieces.resolve_piece_font()
+    message = str(caught.value)
+    assert "U+265A" in message
+    assert "--check-fonts" in message
+
+
+def test_candidate_paths_are_deduplicated_and_exist():
+    paths = candidate_font_paths(
+        ("/nope/missing.ttf",) + tuple(), ("dejavusans", "dejavusans")
+    )
+    assert len(paths) == len(set(paths))
+    assert all(os.path.exists(path) for path in paths)
+
+
+def test_ui_font_falls_back_to_the_pygame_default():
+    """UI text must never hard-fail; only the pieces need specific glyphs."""
+    assert resolve_ui_font(("/nope/missing.ttf",), ()) is None
+    assert pygame.font.Font(None, 16) is not None
+
+
+def test_describe_fonts_reports_the_selection():
+    report = describe_fonts()
+    assert "selected piece font:" in report
+    assert "platform:" in report
 
 
 # ------------------------------------------------------------- glyphs
