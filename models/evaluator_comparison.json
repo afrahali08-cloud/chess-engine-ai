@@ -5,12 +5,12 @@
   "lowest_mae_evaluator": "neural",
   "dataset": {
     "source_file": "lichess_evaluations.csv",
-    "source_sha256": "b68260e3babd68458d7c926dcf453367231dc67ad4b48f4835cd821f0976be9c",
-    "total_positions": 500000,
+    "source_sha256": "ad8b2462336ddcea405edf5791b579165cbf3ad5de2a75659bb6b57974976eef",
+    "total_positions": 1000000,
     "split_counts": {
-      "train": 399427,
-      "validation": 50995,
-      "test": 49578
+      "train": 799655,
+      "validation": 101678,
+      "test": 98667
     },
     "split_strategy": "sha256_game_id_80_10_10_v1",
     "random_seed": 42,
@@ -18,22 +18,22 @@
   },
   "results": {
     "handcrafted": {
-      "mae_cp": 200.72072290128685,
-      "rmse_cp": 286.51443876242485,
-      "r2": 0.4562594378018323,
-      "positions_per_second": 25463.303283260742
+      "mae_cp": 200.90218614126303,
+      "rmse_cp": 286.1452448642857,
+      "r2": 0.4629469320046663,
+      "positions_per_second": 24264.44648997025
     },
     "ridge": {
-      "mae_cp": 165.81348582032354,
-      "rmse_cp": 234.13819681451324,
-      "r2": 0.6368857900033751,
-      "positions_per_second": 79886.2083144
+      "mae_cp": 167.6434167452137,
+      "rmse_cp": 236.35374791842693,
+      "r2": 0.6335884776550387,
+      "positions_per_second": 76537.37793802371
     },
     "neural": {
-      "mae_cp": 141.30880632538626,
-      "rmse_cp": 211.50548468357127,
-      "r2": 0.7036929575191834,
-      "positions_per_second": 12012.06063818726
+      "mae_cp": 139.50481924047554,
+      "rmse_cp": 209.1544659893134,
+      "r2": 0.7130683735673076,
+      "positions_per_second": 11986.099614303666
     }
   }
 }
