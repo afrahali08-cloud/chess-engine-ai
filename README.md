@@ -15,9 +15,15 @@ We're building a chess engine that:
 ## Current architecture
 
 The playable engine path is based on `python-chess`:
+- `src/gui_main.py` runs the windowed game; `src/gui/` holds the pygame frontend.
 - `src/main.py` runs the command-line game.
+- `src/game_session.py` holds the board and move history, shared by both frontends.
 - `src/engine.py` searches legal moves with minimax and alpha-beta pruning.
 - `src/board/evaluation.py` evaluates `python-chess` board positions.
+
+`engine.py` keeps a module-level transposition table that it clears on entry, so
+searches are not reentrant. `gui/engine_worker.py` runs one worker thread and
+executes jobs one at a time, against a copy of the board.
 
 The custom board implementation in `src/board/board.py`, `src/board/piece.py`,
 and `src/board/game.py` is kept as an experimental/manual rules module, but it is
@@ -30,6 +36,19 @@ python -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
 ```
+
+### Windowed interface
+
+```bash
+python src/gui_main.py
+python src/gui_main.py --evaluator handcrafted --play-as black --coach
+```
+
+Click a piece, then click where it should go. The evaluator, depth, time limit,
+side, and coach can all be changed in the window. Keys: `n` new game, `u` undo,
+`f` flip, `Esc` deselect, `F11` fullscreen, `q` quit.
+
+### Terminal interface
 
 The engine supports hand-crafted, Ridge, and neural evaluation:
 
