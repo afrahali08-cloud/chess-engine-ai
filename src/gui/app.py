@@ -38,6 +38,18 @@ DEPTH_RANGE = (1, 8)
 TIME_STEPS = (0.1, 0.25, 0.5, 1.0, 2.0, 3.0, 5.0, 8.0, 12.0)
 
 
+def _step_time(current: float, direction: int) -> float:
+    """Move one notch along TIME_STEPS, snapping if the value is off-ladder."""
+    try:
+        index = TIME_STEPS.index(current)
+    except ValueError:
+        index = min(
+            range(len(TIME_STEPS)),
+            key=lambda i: abs(TIME_STEPS[i] - current),
+        )
+    return TIME_STEPS[max(0, min(len(TIME_STEPS) - 1, index + direction))]
+
+
 class ChessApp:
     def __init__(
         self,
@@ -125,6 +137,22 @@ class ChessApp:
             index=1 if self.session.config.coach else 0,
         )
         y += row_h + gap
+        # The coach has its own budget; the Depth/Time steppers above drive the
+        # engine's search and have no effect on it.
+        coach_depth = Stepper(
+            Rect(left, y, half, row_h),
+            "Coach depth",
+            "coach_depth",
+            value=self.session.config.coach_depth,
+        )
+        coach_time = Stepper(
+            Rect(left + half + gap, y, half, row_h),
+            "Coach time",
+            "coach_time_limit",
+            value=self.session.config.coach_time_limit,
+            formatter=lambda v: f"{v:g}s",
+        )
+        y += row_h + gap
         new_game = Button(Rect(left, y, third, row_h), "New Game", "new_game")
         undo = Button(Rect(left + third + gap, y, third, row_h), "Undo", "undo")
         flip = Button(
@@ -147,6 +175,8 @@ class ChessApp:
             time_limit,
             play_as,
             coach,
+            coach_depth,
+            coach_time,
             new_game,
             undo,
             flip,
@@ -166,6 +196,8 @@ class ChessApp:
             "White" if config.human_color == chess.WHITE else "Black"
         )
         self._by_name["coach"].set_value("On" if config.coach else "Off")
+        self._by_name["coach_depth"].value = config.coach_depth
+        self._by_name["coach_time_limit"].value = config.coach_time_limit
         self.move_list.set_rows(rows)
 
     def apply_action(self, action) -> None:
@@ -180,16 +212,22 @@ class ChessApp:
                 )
             )
         elif action.name == "time_limit":
-            steps = TIME_STEPS
-            try:
-                index = steps.index(config.time_limit)
-            except ValueError:
-                index = min(
-                    range(len(steps)),
-                    key=lambda i: abs(steps[i] - config.time_limit),
+            self.session.set_config(
+                config.replace(time_limit=_step_time(config.time_limit, action.value))
+            )
+        elif action.name == "coach_depth":
+            low, high = DEPTH_RANGE
+            self.session.set_config(
+                config.replace(
+                    coach_depth=max(low, min(high, config.coach_depth + action.value))
                 )
-            index = max(0, min(len(steps) - 1, index + action.value))
-            self.session.set_config(config.replace(time_limit=steps[index]))
+            )
+        elif action.name == "coach_time_limit":
+            self.session.set_config(
+                config.replace(
+                    coach_time_limit=_step_time(config.coach_time_limit, action.value)
+                )
+            )
         elif action.name == "play_as":
             wanted = chess.WHITE if action.value == "White" else chess.BLACK
             if wanted != config.human_color:
@@ -460,6 +498,12 @@ class ChessApp:
                     explanation=analysis.explanation,
                     search_depth=analysis.search_depth,
                     used_static_fallback=analysis.used_static_fallback,
+                    reason=analysis.reason,
+                    refutation_san=analysis.refutation_san,
+                    best_line_san=analysis.best_line_san,
+                    material_swing=analysis.material_swing,
+                    mate_for_opponent=analysis.mate_for_opponent,
+                    missed_mate=analysis.missed_mate,
                 )
                 break
 

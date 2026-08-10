@@ -23,6 +23,21 @@ class CoachView:
     explanation: str
     search_depth: int
     used_static_fallback: bool = False
+    reason: str = ""
+    refutation_san: tuple[str, ...] = ()
+    best_line_san: tuple[str, ...] = ()
+    material_swing: str | None = None
+    mate_for_opponent: bool = False
+    missed_mate: bool = False
+
+    @property
+    def loss_text(self) -> str:
+        """Pawn figure, or a mate verdict where a pawn count would be absurd."""
+        if self.mate_for_opponent:
+            return "allows forced mate"
+        if self.missed_mate:
+            return "misses forced mate"
+        return f"{self.centipawn_loss / 100:.2f} pawn loss"
 
 
 @dataclass(frozen=True)

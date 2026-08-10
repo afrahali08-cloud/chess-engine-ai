@@ -283,9 +283,7 @@ def draw_coach_panel(surface, vm: ViewModel, assets: Assets, layout: Layout):
         (left + 22, y),
         color,
     )
-    loss = assets.fonts.body.render(
-        f"{coach.centipawn_loss / 100:.2f} pawn loss", True, theme.dim_text
-    )
+    loss = assets.fonts.body.render(coach.loss_text, True, theme.dim_text)
     surface.blit(loss, (rect.right - 14 - loss.get_width(), y + 3))
 
     y += 30
@@ -306,11 +304,45 @@ def draw_coach_panel(surface, vm: ViewModel, assets: Assets, layout: Layout):
         y += 20
 
     y += 4
-    for line in wrap_text(assets.fonts.body, coach.explanation, width):
-        if y + 20 > rect.bottom - 10:
-            break
-        _text(surface, assets.fonts.body, line, (left, y), theme.text)
+    max_lines = max(0, (rect.bottom - 10 - y) // 22)
+    wrapped: list[tuple[str, object]] = []
+    for text, tone in coach_panel_lines(coach):
+        for line in wrap_text(assets.fonts.body, text, width):
+            wrapped.append((line, tone))
+
+    if len(wrapped) > max_lines:
+        # Entries are in priority order, so cut from the end and mark it, rather
+        # than letting the text stop mid-sentence as if that were the whole point.
+        wrapped = wrapped[:max_lines]
+        if wrapped:
+            last_text, last_tone = wrapped[-1]
+            wrapped[-1] = (last_text.rstrip(" ") + "...", last_tone)
+
+    for line, tone in wrapped:
+        _text(surface, assets.fonts.body, line, (left, y), tone(theme))
         y += 22
+
+
+def coach_panel_lines(coach) -> list[tuple[str, object]]:
+    """Panel text in priority order.
+
+    Only ~4 wrapped lines fit at 1280x800, so the "why" comes first and the
+    engine's longer sentence goes last, where it is the first thing dropped.
+    """
+    entries: list[tuple[str, object]] = []
+    if coach.reason:
+        entries.append((coach.reason, lambda theme: theme.text))
+    if coach.refutation_san:
+        line = " ".join((coach.played_san, *coach.refutation_san))
+        if coach.material_swing:
+            line += f"  ({coach.material_swing})"
+        entries.append((line, lambda theme: theme.dim_text))
+    if coach.best_line_san:
+        expected = " ".join((coach.best_san, *coach.best_line_san))
+        entries.append((f"expected {expected}", lambda theme: theme.dim_text))
+    if coach.explanation and coach.explanation != coach.reason:
+        entries.append((coach.explanation, lambda theme: theme.dim_text))
+    return entries
 
 
 def draw_status(surface, vm: ViewModel, assets: Assets, layout: Layout):

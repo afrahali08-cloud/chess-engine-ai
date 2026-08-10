@@ -26,7 +26,7 @@ from gui.pieces import (
     resolve_piece_font,
     resolve_ui_font,
 )
-from gui.render import draw_frame, wrap_text
+from gui.render import coach_panel_lines, draw_frame, wrap_text
 from gui.theme import DEFAULT_THEME, NOTDEF_PROBE, PIECE_GLYPHS
 from gui.viewmodel import CoachView, MoveRow, ViewModel
 
@@ -314,3 +314,70 @@ def test_wrap_text_breaks_on_width(assets):
 def test_wrap_text_handles_empty_and_long_words(assets):
     assert wrap_text(assets.fonts.body, "", 200) == []
     assert len(wrap_text(assets.fonts.body, "x" * 200, 50)) == 1
+
+
+# -------------------------------------------------------- coach panel
+
+
+def coach_view(**overrides):
+    base = dict(
+        classification="Blunder",
+        centipawn_loss=885,
+        played_san="Qg5",
+        best_san="Nf6",
+        explanation="The engine preferred Nf6, which develops a knight.",
+        search_depth=3,
+        reason="Qg5 leaves your queen on g5 en prise.",
+        refutation_san=("Nxg5",),
+        best_line_san=("Nc3",),
+        material_swing="loses a queen",
+    )
+    base.update(overrides)
+    return CoachView(**base)
+
+
+def test_coach_panel_puts_the_reason_first():
+    """Only ~4 lines fit, so the "why" must not be the thing that gets cut."""
+    lines = coach_panel_lines(coach_view())
+    assert lines[0][0].startswith("Qg5 leaves your queen")
+
+
+def test_coach_panel_shows_the_line_with_its_material_swing():
+    lines = [text for text, _tone in coach_panel_lines(coach_view())]
+    assert "Qg5 Nxg5  (loses a queen)" in lines
+
+
+def test_coach_panel_labels_the_expected_continuation():
+    lines = [text for text, _tone in coach_panel_lines(coach_view())]
+    assert "expected Nf6 Nc3" in lines
+
+
+def test_coach_panel_drops_the_engine_sentence_last():
+    lines = [text for text, _tone in coach_panel_lines(coach_view())]
+    assert lines[-1].startswith("The engine preferred")
+
+
+def test_coach_panel_omits_empty_sections():
+    lines = coach_panel_lines(
+        coach_view(reason="", refutation_san=(), best_line_san=(), material_swing=None)
+    )
+    assert len(lines) == 1
+
+
+def test_coach_panel_does_not_repeat_the_reason_as_the_explanation():
+    view = coach_view(explanation="Qg5 leaves your queen on g5 en prise.")
+    texts = [text for text, _tone in coach_panel_lines(view)]
+    assert texts.count("Qg5 leaves your queen on g5 en prise.") == 1
+
+
+def test_mate_loss_text_replaces_the_pawn_figure():
+    assert coach_view(mate_for_opponent=True).loss_text == "allows forced mate"
+    assert coach_view(missed_mate=True).loss_text == "misses forced mate"
+    assert coach_view().loss_text == "8.85 pawn loss"
+
+
+def test_full_frame_renders_with_a_populated_coach_panel(assets):
+    surface = pygame.Surface((1280, 800))
+    vm = ViewModel(board=chess.Board(), coach=coach_view(), coach_enabled=True)
+    draw_frame(surface, vm, assets)
+    assert surface.get_bounding_rect().width > 0

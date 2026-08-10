@@ -18,8 +18,9 @@ from coach import MoveAnalysis
 from engine import SearchResult
 from game_session import GameSession, SessionConfig
 from gui import interaction
-from gui.app import ChessApp
+from gui.app import DEPTH_RANGE, TIME_STEPS, ChessApp, _step_time
 from gui.engine_worker import JobResult
+from gui.widgets import Action
 
 HANDCRAFTED = EvaluatorSelection(
     requested="handcrafted",
@@ -424,3 +425,65 @@ def test_no_engine_job_is_queued_once_the_game_is_over(app):
     app.request_engine_move()
 
     assert app.runner.outstanding("engine") == 0
+
+
+# ------------------------------------------------- coach vs engine budget
+
+
+def test_coach_and_engine_budgets_are_independent(app):
+    """The Depth/Time steppers drive the search; the coach has its own pair."""
+    before = (app.session.config.coach_depth, app.session.config.coach_time_limit)
+
+    app.apply_action(Action("depth", 1))
+    app.apply_action(Action("time_limit", 1))
+
+    assert (
+        app.session.config.coach_depth,
+        app.session.config.coach_time_limit,
+    ) == before
+
+
+def test_coach_time_stepper_changes_only_the_coach(app):
+    engine_before = (app.session.config.depth, app.session.config.time_limit)
+
+    app.apply_action(Action("coach_time_limit", 1))
+    app.apply_action(Action("coach_depth", 1))
+
+    assert (app.session.config.depth, app.session.config.time_limit) == engine_before
+    assert app.session.config.coach_time_limit > 1.0
+    assert app.session.config.coach_depth == 5
+
+
+def test_coach_depth_is_clamped_to_the_same_range_as_the_engine(app):
+    for _ in range(40):
+        app.apply_action(Action("coach_depth", 1))
+    assert app.session.config.coach_depth == DEPTH_RANGE[1]
+    for _ in range(40):
+        app.apply_action(Action("coach_depth", -1))
+    assert app.session.config.coach_depth == DEPTH_RANGE[0]
+
+
+def test_coach_time_walks_the_shared_step_ladder(app):
+    for _ in range(40):
+        app.apply_action(Action("coach_time_limit", 1))
+    assert app.session.config.coach_time_limit == TIME_STEPS[-1]
+    for _ in range(40):
+        app.apply_action(Action("coach_time_limit", -1))
+    assert app.session.config.coach_time_limit == TIME_STEPS[0]
+
+
+def test_step_time_snaps_a_value_that_is_off_the_ladder():
+    assert _step_time(0.9, 1) == 2.0   # nearest notch is 1.0, then step up
+    assert _step_time(0.9, -1) == 0.5
+
+
+def test_coach_widgets_reflect_the_session(app):
+    app.apply_action(Action("coach_depth", 1))
+    app.apply_action(Action("coach_time_limit", 1))
+    app.sync_widgets(())
+
+    assert app._by_name["coach_depth"].value == app.session.config.coach_depth
+    assert (
+        app._by_name["coach_time_limit"].value
+        == app.session.config.coach_time_limit
+    )

@@ -26,7 +26,7 @@ EVAL_BAR_GAP = 12
 BOARD_PANEL_GAP = 16
 PANEL_GAP = 12
 # Fractions of the content column height given to the three right-hand panels.
-CONTROLS_SHARE = 184 / 688
+CONTROLS_SHARE = 222 / 688  # five rows: the coach needs its own depth and time
 COACH_SHARE = 208 / 688
 
 
