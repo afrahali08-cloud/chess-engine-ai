@@ -307,7 +307,9 @@ class ChessApp:
             self._handle_evaluator_result(result)
             return
         if result.stale:
-            return  # the board moved on; this answer is for a dead position
+            # the board moved on; this answer is for a dead position
+            self.refresh_status()
+            return
         if not result.ok:
             self.status_text = f"{result.kind} failed: {result.error}"
             self.status_color = "error"
