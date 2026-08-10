@@ -152,7 +152,7 @@ class BackgroundRunner:
             error: BaseException | None = None
             try:
                 value = job.fn()
-            except BaseException as exc:  # noqa: BLE001 - reported to the UI
+            except Exception as exc:  # noqa: BLE001 - reported to the UI
                 error = exc
             finally:
                 with self._lock:
