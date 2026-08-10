@@ -123,7 +123,16 @@ class BackgroundRunner:
             drained.append(
                 result
                 if result.generation == current
-                else JobResult(**{**result.__dict__, "stale": True})
+                else JobResult(
+                    job_id=result.job_id,
+                    generation=result.generation,
+                    kind=result.kind,
+                    value=result.value,
+                    error=result.error,
+                    elapsed=result.elapsed,
+                    payload=result.payload,
+                    stale=True,
+                )
             )
         return drained
 
