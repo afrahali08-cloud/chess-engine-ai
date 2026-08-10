@@ -46,6 +46,15 @@ def build_gui_parser() -> argparse.ArgumentParser:
         help="window size as WIDTHxHEIGHT (default: 1280x800)",
     )
     parser.add_argument(
+        "--coach-line-time-limit",
+        type=float,
+        default=1.5,
+        help=(
+            "extra seconds the coach may spend working out the refutation "
+            "and expected lines (default: 1.5)"
+        ),
+    )
+    parser.add_argument(
         "--check-fonts",
         action="store_true",
         help="report which fonts were found for the pieces, then exit",
@@ -80,6 +89,7 @@ def main(argv: list[str] | None = None) -> int:
         coach=args.coach,
         coach_depth=args.coach_depth,
         coach_time_limit=args.coach_time_limit,
+        coach_line_time_limit=args.coach_line_time_limit,
         human_color=chess.WHITE if args.play_as == "white" else chess.BLACK,
     )
 

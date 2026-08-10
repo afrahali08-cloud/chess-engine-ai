@@ -45,6 +45,7 @@ class SessionConfig:
     coach: bool = False
     coach_depth: int = 4
     coach_time_limit: float = 1.0
+    coach_line_time_limit: float = 1.5  # extra budget for the why-lines
     human_color: chess.Color = chess.WHITE
 
     def replace(self, **changes) -> "SessionConfig":
@@ -184,6 +185,7 @@ class GameSession:
         snapshot = board_before.copy()
         depth = self.config.coach_depth
         time_limit = self.config.coach_time_limit
+        line_time_limit = self.config.coach_line_time_limit
         evaluate = self.selection.evaluate
 
         def run() -> MoveAnalysis:
@@ -193,6 +195,7 @@ class GameSession:
                 depth=depth,
                 time_limit=time_limit,
                 evaluator=evaluate,
+                line_time_limit=line_time_limit,
             )
 
         return run
