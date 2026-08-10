@@ -58,7 +58,7 @@ python src/main.py --evaluator ridge --time-limit 3 --depth 4
 python src/main.py --evaluator handcrafted --time-limit 3 --depth 4
 ```
 
-Neural evaluation is the default because the 500,000-position model has both
+Neural evaluation is the default because the 1,000,000-position model has both
 the lowest held-out test MAE and the best fixed-time playing-strength result.
 If PyTorch or the neural checkpoint is unavailable, neural mode falls back to
 Ridge, then to the hand-crafted evaluator.
@@ -85,7 +85,7 @@ mate-only evaluations.
 python scripts/extract_lichess.py \
   --input ~/Downloads/lichess_db_standard_rated_2026-06.pgn.zst \
   --output data/lichess_evaluations.csv \
-  --limit 500000
+  --limit 1000000
 ```
 
 The output columns are `game_id`, `fen`, `cp`, and `ply`. Local archives and the
@@ -122,13 +122,13 @@ python scripts/compare_evaluators.py \
   --overwrite
 ```
 
-Current results from 500,000 positions:
+Current results from 1,000,000 positions:
 
 | Evaluator | Test MAE | Test RMSE | R2 |
 | --- | ---: | ---: | ---: |
-| Hand-crafted | 200.7 cp | 286.5 cp | 0.456 |
-| Ridge | 165.8 cp | 234.1 cp | 0.637 |
-| Neural MLP | 141.3 cp | 211.5 cp | 0.704 |
+| Hand-crafted | 200.9 cp | 286.1 cp | 0.463 |
+| Ridge | 167.6 cp | 236.4 cp | 0.634 |
+| Neural MLP | 139.5 cp | 209.2 cp | 0.713 |
 
 ## Playing-strength benchmark
 
@@ -146,14 +146,14 @@ python scripts/benchmark_evaluators.py \
 
 The current 12-game result is:
 
-| Evaluator | Wins | Draws | Losses | Points | Average depth |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| Ridge | 1 | 6 | 5 | 4.0 | 1.37 |
-| Neural MLP | 5 | 6 | 1 | 8.0 | 1.11 |
+| Evaluator | Wins | Draws | Losses | Unresolved | Points | Average depth |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Ridge | 1 | 6 | 2 | 3 | 4.0 | 1.73 |
+| Neural MLP | 2 | 6 | 1 | 3 | 5.0 | 1.40 |
 
-The benchmark uses both colors for every opening. All 12 games ended naturally
-by checkmate or threefold repetition. Results and per-game move data are stored
-in `models/strength_benchmark.json`.
+The benchmark uses both colors for every opening. Nine games ended naturally;
+three reached the 100-ply limit and are recorded as unresolved. Results and
+per-game move data are stored in `models/strength_benchmark.json`.
 
 Run the complete test suite with:
 
