@@ -1,105 +1,78 @@
 # Chess-Engine-AI
 
-AI chess engine with alpha-beta search, learned position evaluation, a Pygame
-interface, and a move-quality coach. This is a CMPT 310 course project.
+Chess-Engine-AI is a local chess application that combines classical game-tree
+search, learned position evaluation, and move-quality coaching. It provides a
+Pygame interface for playing against the engine and a reproducible pipeline for
+extracting evaluated positions, training models, comparing evaluators, and
+benchmarking playing strength.
 
 ## Features
 
-- Playable command-line and Pygame interfaces built on `python-chess`.
-- Iterative-deepening minimax with alpha-beta pruning, quiescence search,
-  transposition caching, and a per-move deadline.
-- Three interchangeable evaluators: hand-crafted, Ridge regression, and a
-  PyTorch multilayer perceptron (MLP).
-- Automatic evaluator fallback: neural to Ridge to hand-crafted.
-- Move coaching based on centipawn loss, short refutation lines, and tactical
-  board facts.
-- Reproducible Lichess extraction, game-level data splitting, training,
-  evaluator comparison, and fixed-time self-play benchmarking.
+- Pygame interface with configurable player color, evaluator, search depth,
+  time limit, undo, board flipping, and move history.
+- Iterative-deepening Minimax with Alpha-Beta Pruning.
+- Quiescence Search, move ordering, and a Transposition Table.
+- Deadline-aware search with complete board-state restoration.
+- Handcrafted, Ridge, and Neural MLP position evaluators.
+- Automatic evaluator fallback from Neural to Ridge to Handcrafted.
+- Move-quality Coach with centipawn loss, move classification, recommended
+  alternatives, and short refutation lines.
+- Lichess data extraction, game-level dataset splitting, model training,
+  held-out evaluation, and color-swapped self-play benchmarking.
 
-## Fresh installation tutorial
+## Installation and Quick Start
 
-The trained Ridge and neural model files are included in the repository. A new
-user can play immediately after installing the dependencies; downloading the
-Lichess archive or retraining the models is **not** required. The original
-`.pgn.zst` archive and generated training CSV are too large for this repository
-and are not included on GitHub.
+The trained Ridge and Neural model files are included in the repository. Playing
+the game does not require downloading the training archive or retraining the
+models.
 
-### Step 1: install the prerequisites
+### 1. Install prerequisites
 
-Install these tools before cloning the project:
-
-- Git
-- Python 3.11 or Python 3.12
-
-Check that both commands are available:
+Install Git and Python 3.11 or 3.12, then verify them:
 
 ```bash
 git --version
 python3 --version
 ```
 
-On Windows, use `py --version` if `python3` is not recognized.
+On Windows, use `py --version` if `python3` is unavailable.
 
-### Step 2: clone the repository
-
-Open Terminal, PowerShell, or Command Prompt and run:
+### 2. Clone the repository
 
 ```bash
 git clone https://github.com/afrahali08-cloud/chess-engine-ai.git
 cd chess-engine-ai
 ```
 
-All remaining commands in this README must be run from the repository root,
-the directory that contains `README.md`, `requirements.txt`, `src/`, and
-`models/`.
+Run all remaining commands from the repository root, which contains
+`README.md`, `requirements.txt`, `src/`, and `models/`.
 
-### Step 3: create a clean virtual environment
+### 3. Create a virtual environment
 
-On macOS or Linux:
+macOS or Linux:
 
 ```bash
 python3 -m venv .venv
-```
-
-On Windows:
-
-```powershell
-py -3.12 -m venv .venv
-```
-
-The `.venv` directory is local and ignored by Git.
-
-### Step 4: activate the virtual environment
-
-On macOS or Linux:
-
-```bash
 source .venv/bin/activate
 ```
 
-On Windows PowerShell:
+Windows PowerShell:
 
 ```powershell
+py -3.12 -m venv .venv
 .venv\Scripts\Activate.ps1
 ```
 
-On Windows Command Prompt:
+Windows Command Prompt:
 
 ```bat
+py -3.12 -m venv .venv
 .venv\Scripts\activate.bat
 ```
 
-After activation, the terminal prompt should begin with `(.venv)`. Check that
-the environment's Python is being used:
+After activation, the terminal prompt should begin with `(.venv)`.
 
-```bash
-python --version
-```
-
-### Step 5: install every dependency
-
-Upgrade pip and install the complete runtime, GUI, training, extraction, and
-test dependency set:
+### 4. Install dependencies
 
 ```bash
 python -m pip install --upgrade pip
@@ -107,93 +80,41 @@ python -m pip install -r requirements.txt
 python -m pip check
 ```
 
-The last command should print `No broken requirements found.`
+The final command should report `No broken requirements found.`
 
-### Step 6: verify the included model and GUI assets
+### 5. Verify the installation
 
-Confirm that the GUI can find its bundled chess font:
+Check the bundled GUI font and run the automated tests:
 
 ```bash
 python src/gui_main.py --check-fonts
-```
-
-The output should show `[OK]` for
-`src/gui/assets/DejaVuSans.ttf` and display it as the selected piece font.
-The trained models used by the application are already present at:
-
-```text
-models/neural_evaluator.pt
-models/learned_evaluator.json
-```
-
-### Step 7: run the automated tests
-
-```bash
 python -m pytest -q
 ```
 
-The current repository should report `258 passed` with no skipped or failed
-tests. A different passing count is acceptable if new tests were added later.
+The current version has 258 passing tests with no failures or skipped tests.
 
-### Step 8: start the GUI
+### 6. Start the GUI
 
-The recommended way to run and demonstrate the project is:
-
-```bash
-python src/gui_main.py
-```
-
-The GUI uses the trained neural evaluator by default. For an explicit
-presentation command with the move coach enabled, run:
-
-```bash
-python src/gui_main.py \
-  --evaluator neural \
-  --time-limit 3 \
-  --coach
-```
-
-On Windows PowerShell, the same command can be entered on one line:
-
-```powershell
-python src/gui_main.py --evaluator neural --time-limit 3 --coach
-```
-
-### Step 9: play and exit
-
-Click one of your pieces and then click its destination square. The evaluator,
-search depth, time limit, side, and coach can be changed in the window. Press
-`q` or close the window to exit. When finished, leave the virtual environment
-with:
-
-```bash
-deactivate
-```
-
-The terminal interface described below is retained as a debugging and fallback
-entry point.
-
-## Run the application
-
-### Windowed interface (recommended)
+The recommended way to run the project is:
 
 ```bash
 python src/gui_main.py
-python src/gui_main.py --evaluator neural --time-limit 3 --coach
-python src/gui_main.py --evaluator ridge --play-as black
 ```
 
-Click a piece and then its destination. The evaluator, depth, time limit,
-player color, and coach can also be changed in the window. Useful keys are `n`
-for a new game, `u` to undo, `f` to flip, `F11` for fullscreen, and `q` to quit.
-
-Check GUI font availability without starting a game:
+For a demonstration with explicit Neural evaluation and coaching:
 
 ```bash
-python src/gui_main.py --check-fonts
+python src/gui_main.py --evaluator neural --time-limit 3 --coach
 ```
+
+Click a piece and then its destination square. The evaluator, depth, time
+limit, player color, and Coach can also be changed inside the application.
+Press `n` for a new game, `u` to undo, `f` to flip the board, `F11` for
+fullscreen, and `q` to quit.
 
 ### Terminal interface
+
+The terminal interface is available as a lightweight alternative:
 
 ```bash
 python src/main.py --evaluator neural --time-limit 3 --depth 4
@@ -201,89 +122,72 @@ python src/main.py --evaluator ridge --time-limit 3 --depth 4
 python src/main.py --evaluator handcrafted --time-limit 3 --depth 4
 ```
 
-Enable move coaching with:
+## System Architecture
 
-```bash
-python src/main.py \
-  --evaluator neural \
-  --coach \
-  --coach-time-limit 1 \
-  --time-limit 3
+The application uses `python-chess` for chess rules and legal move generation.
+The selected evaluator assigns White-relative centipawn scores to positions,
+while Minimax searches legal continuations and selects the move. The evaluator
+does not select moves directly.
+
+```mermaid
+flowchart LR
+    A["Human move"] --> B["python-chess legality check"]
+    B --> C["Game state"]
+    C --> D["Iterative-deepening Minimax"]
+    D --> E["Alpha-Beta and Quiescence Search"]
+    E --> F["Position evaluator"]
+    F --> D
+    D --> G["Best legal move"]
+    G --> H["GUI update"]
+    C --> I["Move-quality Coach"]
+    D --> I
+    I --> H
 ```
 
-Neural evaluation is the default because it has the lowest held-out test MAE.
-If PyTorch or the neural checkpoint is unavailable, the application falls back
-to Ridge and then to the hand-crafted evaluator.
+The model-development pipeline is separate from normal gameplay:
 
-## Common setup problems
-
-### `No module named ...`
-
-The virtual environment is probably inactive or the dependencies were not
-installed. Return to the repository root and run:
-
-```bash
-source .venv/bin/activate
-python -m pip install -r requirements.txt
+```mermaid
+flowchart LR
+    A["Lichess June 2026 PGN.ZST"] --> B["Stream and parse PGN"]
+    B --> C["Extract numeric %eval positions"]
+    C --> D["Sample, deduplicate, and clip labels"]
+    D --> E["Game-level train / validation / test split"]
+    E --> F["Ridge training"]
+    E --> G["Neural MLP training"]
+    F --> H["Held-out comparison"]
+    G --> H
+    H --> I["Saved models and benchmark"]
 ```
 
-Windows users should replace the activation command with the PowerShell or
-Command Prompt command from Step 4.
+## Position Evaluators
 
-### PowerShell blocks `Activate.ps1`
+All evaluators return a centipawn score from White's perspective. Positive
+values favor White, negative values favor Black, and approximately 100
+centipawns represent one pawn of evaluation.
 
-Allow local activation for the current PowerShell process, then activate again:
+### Handcrafted evaluator
 
-```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-.venv\Scripts\Activate.ps1
-```
+The Handcrafted evaluator combines material values, piece-square tables, pawn
+structure, king safety, and game phase. It requires no training and serves as
+the final fallback when a learned model cannot be loaded.
 
-### `python: can't open file 'src/gui_main.py'`
+### Ridge evaluator
 
-The command is being run from the wrong directory. Run `cd chess-engine-ai`
-and confirm that `README.md` and `src/` are visible before trying again.
-
-### The neural model falls back to Ridge
-
-Check that `models/neural_evaluator.pt` exists and that PyTorch imports:
-
-```bash
-python -c "import torch; print(torch.__version__)"
-```
-
-Reinstall `requirements.txt` if the import fails. The fallback keeps the game
-playable, but the normal fresh installation should select `neural`.
-
-## Evaluator models and training
-
-The search engine does not predict a move directly. Minimax generates and
-searches legal moves, while the selected evaluator predicts a single
-White-relative position score in centipawns. Positive scores favor White and
-negative scores favor Black.
-
-### Hand-crafted evaluator
-
-The baseline evaluator uses manually selected chess knowledge such as material,
-piece-square tables, pawn structure, king safety, and game phase. It requires no
-training and remains available as the final fallback evaluator.
-
-### Ridge regression evaluator
-
-The Ridge model is a linear supervised regression model with 387 inputs:
+The Ridge evaluator is a supervised linear regression model with 387 inputs:
 
 - 384 color-symmetric piece-square features (`6 piece types x 64 squares`)
 - 1 side-to-move feature
 - 2 castling-right difference features
 
-It was trained with `alpha=10.0`, the `lsqr` solver, and random seed 42. Ridge
-is fast and interpretable, but a linear model cannot represent all nonlinear
-interactions between pieces.
+It was trained with regularization strength `alpha=10.0`, the `lsqr` solver,
+and random seed 42. Its sparse linear representation makes inference fast, but
+limits the nonlinear relationships it can learn between pieces.
 
 ### Neural MLP evaluator
 
-The default predictor is a feed-forward multilayer perceptron regression model,
-not KNN and not a move-classification model. Its architecture is:
+The default position evaluator is a feed-forward multilayer perceptron trained
+as a supervised regression model. It converts 400 chess-position features into
+a single White-relative centipawn evaluation.
 
 ```text
 400 input features
@@ -297,20 +201,50 @@ not KNN and not a move-classification model. Its architecture is:
   -> centipawn evaluation
 ```
 
-The network has two hidden layers, three trainable linear layers, and 135,681
-trainable parameters. The final layer has no activation because the regression
-output must support both positive and negative centipawn values.
+The model has two hidden layers, three trainable Linear layers, and 135,681
+trainable parameters. The output layer has no activation because the predicted
+score must support both positive and negative values.
 
-Its 400 inputs contain 384 piece-square values plus material balance, pawn
-structure, king safety, game phase, side to move, and castling rights. Training
-uses Adam, mean squared error, learning rate `0.001`, batch size 2048, 20 epochs,
-and random seed 42. The trainer retains the epoch with the lowest validation
-MAE; the committed 4M checkpoint selected epoch 20.
+The 400 inputs contain 384 piece-square features together with material
+balance, pawn structure, king safety, game phase, side to move, and castling
+rights. Training uses Adam, mean squared error, learning rate `0.001`, batch
+size 2048, 20 epochs, and random seed 42. The trainer saves the checkpoint with
+the lowest validation MAE; the committed model selected epoch 20.
 
-### Stored checkpoint metrics
+## Dataset and Preprocessing
 
-Both learned models were trained and evaluated using the same 4M dataset and
-game-level split. Their saved floating-point checkpoint metrics are:
+The models were trained on positions extracted from the **June 2026 Lichess
+standard rated-games archive**.[^1] The official monthly archive is a 28.2 GB
+Zstandard-compressed PGN containing 86,483,328 games.
+
+The extraction process:
+
+1. Streams the `.pgn.zst` archive without creating an uncompressed PGN.
+2. Reads positions with a numeric Stockfish `%eval` annotation.
+3. Converts evaluations to centipawns from White's perspective.
+4. Samples at most 20 evaluated positions per game.
+5. Removes duplicate positions.
+6. Skips annotations without a numeric centipawn value.
+7. Clips training labels to `[-1500, 1500]` centipawns.
+
+The final dataset contains 4,000,000 positions. Complete games are assigned to
+one deterministic split using a SHA-256 hash of `seed:game_id`, with seed 42.
+This prevents neighboring positions from the same game from appearing in both
+training and evaluation data.
+
+| Split | Positions | Percentage |
+| --- | ---: | ---: |
+| Train | 3,194,752 | 79.87% |
+| Validation | 403,685 | 10.09% |
+| Test | 401,563 | 10.04% |
+| **Total** | **4,000,000** | **100%** |
+
+## Training Results
+
+### Saved model metrics
+
+The saved Ridge and Neural checkpoints record metrics from the same dataset and
+game-level split:
 
 | Model | Split | MAE | RMSE | R2 |
 | --- | --- | ---: | ---: | ---: |
@@ -321,142 +255,33 @@ game-level split. Their saved floating-point checkpoint metrics are:
 | Neural MLP | Validation | 135.7 cp | 205.0 cp | 0.737 |
 | Neural MLP | Test | **136.7 cp** | **206.2 cp** | **0.734** |
 
-MAE is the average absolute centipawn error. RMSE penalizes large prediction
-errors more strongly. R2 measures the fraction of label variance explained by
-the model, where values closer to 1 are better.
+MAE is the average absolute centipawn error. RMSE penalizes large errors more
+strongly. R2 measures the fraction of label variance explained by the model,
+where values closer to 1 are better.
 
-## Current models and data
+### Runtime evaluator comparison
 
-The committed Ridge and neural models were trained on the same **4,000,000
-positions** extracted from the June 2026 Lichess standard rated-game archive.[^1]
-Numeric Stockfish `%eval` annotations are converted to centipawns from White's
-point of view and clipped to `[-1500, 1500]`.
-
-Complete games are assigned to deterministic splits using a SHA-256 hash of
-`seed:game_id`, with seed 42. Keeping every position from one game in one split
-prevents leakage between training and evaluation.
-
-| Split | Positions | Percentage |
-| --- | ---: | ---: |
-| Train | 3,194,752 | 79.87% |
-| Validation | 403,685 | 10.09% |
-| Test | 401,563 | 10.04% |
-| Total | 4,000,000 | 100% |
-
-The CSV archives are intentionally ignored by Git. The committed model files
-contain the dataset hash, split counts, seed, feature version, training
-parameters, and regression metrics needed to identify the training run.
-
-## Dataset source and citation
-
-The original data comes from the
-[Lichess Open Database standard-games collection](https://database.lichess.org/#standard_games).
-This project used the **2026 - June** standard rated-games archive:
-
-- Archive: [`lichess_db_standard_rated_2026-06.pgn.zst`](https://database.lichess.org/standard/lichess_db_standard_rated_2026-06.pgn.zst)
-- Official listed size: 28.2 GB
-- Games in the monthly archive: 86,483,328
-- Format: compressed PGN using Zstandard
-
-Lichess monthly archives are independent rather than cumulative. The extractor
-scans the June archive and keeps positions that contain a numeric Stockfish
-`%eval`; it does not treat every game or every position as a labeled example.
-
-For reports or presentations, cite the dataset as:
-
-> Lichess. (2026). *Lichess Open Database: Standard rated games, June 2026*
-> [Data set]. https://database.lichess.org/
-
-## Optional: reproduce the training data
-
-This section is only for users who want to retrain the evaluators. It is not
-part of the normal installation or GUI startup process.
-
-The source `.pgn.zst` and the generated `data/lichess_evaluations_4m.csv` are
-not committed to GitHub. To reproduce the project locally, first download the
-exact June 2026 archive from the direct link above and place it somewhere on
-your own disk, such as `~/Downloads/`.
-
-The extractor streams a `.pgn.zst` archive directly, so an uncompressed PGN is
-not required:
-
-```bash
-python scripts/extract_lichess.py \
-  --input ~/Downloads/lichess_db_standard_rated_2026-06.pgn.zst \
-  --output data/lichess_evaluations_4m.csv \
-  --limit 4000000 \
-  --positions-per-game 20 \
-  --overwrite
-```
-
-The generated CSV columns are `game_id`, `fen`, `cp`, and `ply`.
-
-The command above matches the current project's extraction settings, but an
-independent retraining run is not guaranteed to reproduce byte-for-byte model
-weights or identical metrics. Results can differ when a user selects another
-month, changes extraction limits or sampling settings, uses a different source
-archive, or trains with different PyTorch, NumPy, CPU, CUDA, or operating-system
-versions. The game-level split and random seed are deterministic, so using the
-same June 2026 archive, repository version, command-line parameters, and seed 42
-provides the closest reproduction of the committed run.
-
-## Run the complete model pipeline
-
-`scripts/run_pipeline.py` is the main reproducible workflow entry point. It
-runs Ridge training, neural training, held-out comparison, and self-play
-benchmarking in separate processes:
-
-```bash
-python scripts/run_pipeline.py \
-  --input data/lichess_evaluations_4m.csv \
-  --expected-positions 4000000 \
-  --overwrite
-```
-
-The neural stage uses 20 epochs, batch size 2048, Adam/MSE, learning rate
-`0.001`, and saves the checkpoint with the lowest validation MAE. A complete 4M
-run requires substantial RAM and can take several minutes. Preview all commands
-without running them using `--dry-run`.
-
-Run selected stages when trained models already exist:
-
-```bash
-python scripts/run_pipeline.py --stages compare --overwrite
-python scripts/run_pipeline.py --stages benchmark --overwrite
-```
-
-The individual scripts remain available for experiments:
-
-```bash
-python scripts/train_evaluator.py --help
-python scripts/train_neural_eval.py --help
-python scripts/compare_evaluators.py --help
-python scripts/benchmark_evaluators.py --help
-```
-
-## Held-out evaluation
-
-The current runtime comparison uses the shared 401,563-position test split:
+The production evaluators were compared on the shared 401,563-position test
+split:
 
 | Evaluator | Test MAE | Test RMSE | R2 | Positions/second |
 | --- | ---: | ---: | ---: | ---: |
-| Hand-crafted | 206.4 cp | 292.4 cp | 0.466 | 24,460 |
+| Handcrafted | 206.4 cp | 292.4 cp | 0.466 | 24,460 |
 | Ridge | 171.6 cp | 241.3 cp | 0.636 | 76,677 |
 | Neural MLP | **136.3 cp** | **205.4 cp** | **0.736** | 12,060 |
 
-The checkpoint table above measures the trainers' raw floating-point outputs.
-This comparison passes positions through the production evaluator, which rounds
-predictions to integer centipawns; that is why the figures differ slightly.
+The checkpoint metrics use raw floating-point predictions. The runtime
+comparison uses production evaluators that round predictions to integer
+centipawns, which causes the small numerical difference between the two tables.
+These metrics measure agreement with held-out Stockfish labels rather than Elo
+or direct playing strength.
 
-These metrics measure agreement with held-out Stockfish labels. They do not by
-themselves establish Elo or playing strength.
+## 4M Gameplay Benchmark
 
-## 4M playing-strength benchmark
-
-The committed benchmark was regenerated from the 4M Ridge and neural model
-artifacts. It uses six fixed openings, swaps colors for every opening, allows
-0.1 seconds per move, searches to a maximum depth of 5, and stops unresolved
-games after 100 searched plies.
+The committed benchmark compares the 4M Ridge and Neural model artifacts using
+six fixed openings. Each opening is played twice with colors swapped. Both
+evaluators receive 0.1 seconds per move, a maximum search depth of 5, and a
+100-ply limit after the opening.
 
 | Evaluator | Wins | Draws | Losses | Unresolved | Points | Average depth |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -464,11 +289,11 @@ games after 100 searched plies.
 | Neural MLP | 1 | 8 | 1 | 2 | 5.0 | 1.28 |
 
 The result is **inconclusive**. Ten games ended naturally and two reached the
-ply limit. The JSON artifact records model hashes and verifies that both learned
-evaluators use the same 4,000,000-position dataset. A larger match is required
-for a meaningful Elo estimate.
+ply limit. The benchmark artifact records each model's SHA-256 hash and verifies
+that both learned evaluators use the same 4,000,000-position dataset. A larger
+match is required for a meaningful Elo estimate.
 
-Reproduce it with:
+Reproduce the committed benchmark with:
 
 ```bash
 python scripts/benchmark_evaluators.py \
@@ -482,33 +307,110 @@ python scripts/benchmark_evaluators.py \
   --overwrite
 ```
 
-## Tests
+## Optional Retraining
 
-Run the complete test suite after installing all requirements:
+Retraining is optional and is not required to run the GUI. The original
+`.pgn.zst` archive and generated 4M CSV are not included in the GitHub
+repository. To reproduce the training process, download the June 2026 archive
+from the Lichess link in the citation and place it on local storage.
+
+Extract the training positions:
 
 ```bash
-python -m pytest -q
+python scripts/extract_lichess.py \
+  --input ~/Downloads/lichess_db_standard_rated_2026-06.pgn.zst \
+  --output data/lichess_evaluations_4m.csv \
+  --limit 4000000 \
+  --positions-per-game 20 \
+  --overwrite
 ```
 
-## Project layout
+Run Ridge training, Neural training, held-out comparison, and benchmarking:
+
+```bash
+python scripts/run_pipeline.py \
+  --input data/lichess_evaluations_4m.csv \
+  --expected-positions 4000000 \
+  --overwrite
+```
+
+Preview the commands without running them:
+
+```bash
+python scripts/run_pipeline.py --dry-run
+```
+
+An independent run is not guaranteed to reproduce byte-identical model weights
+or exactly identical metrics. Results can differ if the source month,
+extraction settings, repository version, dependency versions, operating system,
+or hardware changes. Using the same June 2026 archive, command-line settings,
+code version, and seed 42 provides the closest reproduction.
+
+## Limitations
+
+- The training set contains only positions with numeric `%eval` annotations and
+  may not represent all game phases, openings, ratings, or rare positions
+  equally.
+- Lower evaluation error does not directly establish higher Elo. The current
+  self-play benchmark contains only 12 games.
+- Neural inference is slower than Ridge inference, so the Neural evaluator may
+  reach a lower search depth under an equal time limit.
+- Coach feedback depends on the configured evaluator, search depth, and time
+  budget. It can miss combinations beyond its search horizon.
+- Reproducing the 4M training run requires the external 28.2 GB archive,
+  substantial local storage, memory, and training time.
+
+The project reduces these risks by using game-level splits, deterministic
+seeds, label clipping, position deduplication, held-out metrics, color-swapped
+benchmark games, explicit unresolved results, evaluator fallback, and model and
+dataset hashes in generated artifacts.
+
+## Project Layout
 
 ```text
-src/main.py                     terminal game entry point
-src/gui_main.py                 Pygame entry point
-src/engine.py                   minimax and search control
+src/gui_main.py                 Pygame application entry point
+src/main.py                     terminal application entry point
+src/game_session.py             shared board state and move history
+src/engine.py                   Minimax and search control
 src/coach.py                    move-quality analysis
+src/tactics.py                  tactical board facts
 src/board/evaluators.py         evaluator selection and fallback
-src/board/neural_model.py       MLP architecture
-scripts/extract_lichess.py      streaming archive extractor
-scripts/run_pipeline.py         complete model workflow
-models/                         trained models and evaluation artifacts
+src/board/evaluation.py         Handcrafted evaluator
+src/board/learned_evaluation.py Ridge runtime inference
+src/board/neural_model.py       Neural MLP architecture
+src/board/neural_evaluation.py  Neural runtime inference
+scripts/extract_lichess.py      Lichess archive extraction
+scripts/run_pipeline.py         complete training and evaluation workflow
+models/                         trained models and result artifacts
 tests/                          automated tests
 ```
 
-The older custom board implementation in `src/board/board.py`, `piece.py`, and
-`game.py` is retained as an experimental module. The playable engine path uses
-`python-chess` exclusively.
+## External Libraries
+
+- `python-chess` for chess rules, legal moves, board state, and PGN parsing.
+- PyTorch for Neural MLP training and inference.
+- Scikit-learn and SciPy for Ridge regression and sparse matrices.
+- NumPy for numerical features and regression metrics.
+- Pygame for the desktop interface.
+- Zstandard for streaming `.pgn.zst` decompression.
+- pytest for automated testing.
+
+Install the complete dependency set from `requirements.txt`.
+
+## Data Citation
+
+> Lichess. (2026). *Lichess Open Database: Standard rated games, June 2026*
+> [Data set]. https://database.lichess.org/
+
+- [Lichess standard-games database](https://database.lichess.org/#standard_games)
+- [June 2026 PGN.ZST archive](https://database.lichess.org/standard/lichess_db_standard_rated_2026-06.pgn.zst)
+
+## License
+
+This project is distributed under the [MIT License](LICENSE). The bundled
+DejaVu Sans font is distributed under its included license in
+`src/gui/assets/DejaVuSans-LICENSE.txt`.
 
 [^1]: Lichess. (2026). *Lichess Open Database: Standard rated games, June
     2026* [Data set]. [Database page](https://database.lichess.org/#standard_games),
-    [June 2026 PGN.ZST archive](https://database.lichess.org/standard/lichess_db_standard_rated_2026-06.pgn.zst).
+    [June 2026 archive](https://database.lichess.org/standard/lichess_db_standard_rated_2026-06.pgn.zst).
