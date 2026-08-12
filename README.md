@@ -129,34 +129,46 @@ The selected evaluator assigns White-relative centipawn scores to positions,
 while Minimax searches legal continuations and selects the move. The evaluator
 does not select moves directly.
 
-```mermaid
-flowchart LR
-    A["Human move"] --> B["python-chess legality check"]
-    B --> C["Game state"]
-    C --> D["Iterative-deepening Minimax"]
-    D --> E["Alpha-Beta and Quiescence Search"]
-    E --> F["Position evaluator"]
-    F --> D
-    D --> G["Best legal move"]
-    G --> H["GUI update"]
-    C --> I["Move-quality Coach"]
-    D --> I
-    I --> H
+```text
+Human move
+    -> python-chess legality checking
+    -> game state
+    -> Minimax search
+       -> Iterative Deepening
+       -> Alpha-Beta Pruning
+       -> Quiescence Search
+       -> Transposition Table
+       -> position evaluator
+          -> Handcrafted / Ridge / Neural MLP
+    -> best legal move
+    -> engine move and GUI update
+
+Human move + search result
+    -> Move-quality Coach
+    -> centipawn loss
+    -> move classification
+    -> recommended alternative and refutation line
+    -> GUI feedback
 ```
 
 The model-development pipeline is separate from normal gameplay:
 
-```mermaid
-flowchart LR
-    A["Lichess June 2026 PGN.ZST"] --> B["Stream and parse PGN"]
-    B --> C["Extract numeric %eval positions"]
-    C --> D["Sample, deduplicate, and clip labels"]
-    D --> E["Game-level train / validation / test split"]
-    E --> F["Ridge training"]
-    E --> G["Neural MLP training"]
-    F --> H["Held-out comparison"]
-    G --> H
-    H --> I["Saved models and benchmark"]
+```text
+Lichess June 2026 PGN.ZST
+    -> stream Zstandard decompression
+    -> parse standard rated games
+    -> extract positions with numeric %eval
+    -> convert labels to White-relative centipawns
+    -> sample positions and remove duplicates
+    -> clip labels to [-1500, 1500]
+    -> split complete games by game_id
+       -> training set
+       -> validation set
+       -> test set
+    -> train Ridge and Neural MLP on the same data
+    -> select the best Neural checkpoint using validation MAE
+    -> compare Handcrafted, Ridge, and Neural on the test set
+    -> save models, metadata, metrics, and gameplay benchmark
 ```
 
 ## Position Evaluators
