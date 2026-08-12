@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import sys
@@ -19,6 +20,12 @@ if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 from board.evaluators import EVALUATOR_CHOICES, Evaluator, resolve_evaluator  # noqa: E402
+from board.learned_evaluation import (  # noqa: E402
+    DEFAULT_MODEL_PATH as DEFAULT_RIDGE_MODEL_PATH,
+)
+from board.neural_evaluation import (  # noqa: E402
+    DEFAULT_MODEL_PATH as DEFAULT_NEURAL_MODEL_PATH,
+)
 from engine import analyze_position  # noqa: E402
 
 
@@ -44,6 +51,89 @@ def _positive_float(value: str) -> float:
     if parsed <= 0:
         raise argparse.ArgumentTypeError("value must be greater than zero")
     return parsed
+
+
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as model_file:
+        for chunk in iter(lambda: model_file.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _display_path(path: Path) -> str:
+    resolved = path.resolve()
+    try:
+        return str(resolved.relative_to(ROOT_DIR))
+    except ValueError:
+        return path.name
+
+
+def _model_metadata(name: str) -> dict[str, object]:
+    if name == "handcrafted":
+        return {"model_type": "handcrafted", "artifact_path": None}
+
+    if name == "ridge":
+        model_path = DEFAULT_RIDGE_MODEL_PATH
+        artifact = json.loads(model_path.read_text(encoding="utf-8"))
+    elif name == "neural":
+        import torch
+
+        model_path = DEFAULT_NEURAL_MODEL_PATH
+        artifact = torch.load(model_path, map_location="cpu", weights_only=True)
+    else:
+        raise ValueError(f"unknown evaluator: {name}")
+
+    dataset = artifact.get("dataset")
+    if not isinstance(dataset, dict):
+        raise RuntimeError(f"{name} model does not contain dataset metadata")
+    metrics = artifact.get("metrics")
+    test_metrics = metrics.get("test") if isinstance(metrics, dict) else None
+    return {
+        "model_type": artifact.get("model_type"),
+        "artifact_path": _display_path(model_path),
+        "artifact_sha256": _file_sha256(model_path),
+        "feature_encoding": artifact.get("feature_encoding"),
+        "dataset": dataset,
+        "test_metrics": test_metrics,
+    }
+
+
+def _validate_model_datasets(
+    metadata: dict[str, dict[str, object]],
+    expected_positions: int | None,
+) -> dict[str, object] | None:
+    learned_datasets = [
+        details["dataset"]
+        for details in metadata.values()
+        if isinstance(details.get("dataset"), dict)
+    ]
+    if not learned_datasets:
+        return None
+
+    dataset_keys = {
+        (
+            dataset.get("source_sha256"),
+            dataset.get("total_positions"),
+            dataset.get("split_strategy"),
+            dataset.get("random_seed"),
+        )
+        for dataset in learned_datasets
+    }
+    if len(dataset_keys) != 1:
+        raise RuntimeError("benchmark models were not trained on the same dataset")
+
+    dataset = dict(learned_datasets[0])
+    if (
+        expected_positions is not None
+        and dataset.get("total_positions") != expected_positions
+    ):
+        raise RuntimeError(
+            "benchmark model contains "
+            f"{dataset.get('total_positions')!r} positions; "
+            f"expected {expected_positions}"
+        )
+    return dataset
 
 
 def play_game(
@@ -191,6 +281,7 @@ def benchmark(
     time_limit: float = 0.1,
     max_plies: int = 120,
     opening_count: int = len(DEFAULT_OPENINGS),
+    expected_positions: int | None = None,
     overwrite: bool = False,
 ) -> dict[str, object]:
     if first_name == second_name:
@@ -206,6 +297,11 @@ def benchmark(
     second = resolve_evaluator(second_name)
     if first.selected != first_name or second.selected != second_name:
         raise RuntimeError("requested benchmark evaluator used a fallback")
+
+    model_metadata = {
+        name: _model_metadata(name) for name in (first_name, second_name)
+    }
+    dataset = _validate_model_datasets(model_metadata, expected_positions)
 
     games: list[dict[str, object]] = []
     start = monotonic()
@@ -245,7 +341,7 @@ def benchmark(
         recommended_default = "inconclusive"
 
     artifact: dict[str, object] = {
-        "format_version": 1,
+        "format_version": 2,
         "benchmark_type": "fixed_time_color_swapped_self_play",
         "settings": {
             "evaluators": [first_name, second_name],
@@ -255,6 +351,8 @@ def benchmark(
             "opening_count": opening_count,
             "game_count": len(games),
         },
+        "dataset": dataset,
+        "model_metadata": model_metadata,
         "completed_games": completed_games,
         "recommended_default": recommended_default,
         "summary": summary,
@@ -288,6 +386,11 @@ def build_parser() -> argparse.ArgumentParser:
         type=_positive_int,
         default=len(DEFAULT_OPENINGS),
     )
+    parser.add_argument(
+        "--expected-positions",
+        type=_positive_int,
+        help="fail unless learned models contain this many training positions",
+    )
     parser.add_argument("--overwrite", action="store_true")
     return parser
 
@@ -304,6 +407,7 @@ def main() -> None:
             time_limit=args.time_limit,
             max_plies=args.max_plies,
             opening_count=args.openings,
+            expected_positions=args.expected_positions,
             overwrite=args.overwrite,
         )
     except (FileNotFoundError, FileExistsError, RuntimeError, ValueError) as error:
